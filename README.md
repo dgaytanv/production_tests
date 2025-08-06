@@ -1,38 +1,38 @@
 # production_tests
 
-Simple productions scripts based on the HGCAL Reco prod tools: https://github.com/CMS-HGCAL/reco-prodtools
+This is an updated fork of https://github.com/kdlong/production_tests, which are simple productions scripts based on the HGCAL Reco prod tools: https://github.com/CMS-HGCAL/reco-prodtools. 
 
 
-NOTE: The NanoML ntuples require pepr_CMSSW_12_0_0 (some older pepr_CMSSW_X_Y_Z branches are available, if you prefer). A version working with more minimal changes is in progress
+NOTE: The NanoML ntuples require pepr_CMSSW_15_0_0 (some older pepr_CMSSW_X_Y_Z branches are available, if you prefer, in the original cms-pepr repo at https://github.com/cms-pepr/cmssw/tree/pepr_CMSSW_12_6_0_pre2). A version compatible with fineCalo is currently in progress.
 
-A simple recipe in CMSSW_12_0_0 is:
+A simple recipe in CMSSW_15_0_0 is:
 
 ```shell
-version=CMSSW_12_0_0
+version=CMSSW_15_0_0
 cmsrel $version
 cd $version/src
 cmsenv
 git cms-init
 git cms-merge-topic cms-pepr:pepr_${version}
-scram b -j 8
+scram b -j12
 
-# Note: Here follow the same instructions as in the main reco-prodtools repo, but use the D49 geometry
-git clone git@github.com:kdlong/reco-prodtools.git reco_prodtools
+# Note: Here follow the same instructions as in the main reco-prodtools repo, but use the D110 geometry
+git clone git@github.com:dgaytanv/reco-prodtools.git reco_prodtools
 cd reco_prodtools/templates/python
-./produceSkeletons_D49_NoSmear_NoDQMNoHLT_PU_AVE_200_BX_25ns.sh
+./produceSkeletons_D110.sh
 cd ../../..
 scram b
 ```
 
-To run the GSD step, you should edit the [GSD_GUN.py](GSD_GUN.py) file to select the number of particles, IDs, and energy range you would like to generate. The
+Before running the GSD step, you should edit the [GSD_GUN.py](GSD_GUN.py) file to select the number of particles, IDs, and energy range you would like to generate. To activate or deactivate fineCalo, comment out the GSD_fragment with or without finecalo as needed. Then to run the GSD step you do
 
 ```cmsRun GSD_GUN.py seed=X outputFile=testGSD.root```
 
 Then process the output of this using the RECO config
 
-```cmsRun RECO.py seed=X inputFiles=file:testGSD.root outputFile=testRECO.root```
+```cmsRun RECO.py inputFiles=file:testGSD.root outputFile=testRECO.root```
 
-For the NanoML ntuples, you should use the configurations [nanoML_cfg.py](nanoML_cfg.py) for samples with RECO content. Conversely, use [nanoMLGSD_cfg.py](nanoMLGSD_cfg) if you have a file with only GEN content. Several aspects of this are configurable (store simclusters or not, store merged simclusters or not). configureX functions in the configuration take care of this. This will be made configurable at some point, but open the configuration file and edit to include or not these functions for now.
+For the NanoML ntuples, you should use the configurations [nanoML_cfg.py](nanoML_cfg.py) for samples with RECO content. Conversely, use [nanoMLGSD_cfg.py](nanoMLGSD_cfg) if you have a file with only GEN content. Several aspects of this are configurable (store simclusters or not, store merged simclusters or not). configureX functions in the configuration take care of this. This will be made configurable at some point, but open the configuration file and edit to include or not these functions for now. Note: at the moment, only files with RECO content have been tested for CMSSW_15_0_0 and newer.
 
 Then you run them in the expected way
 
