@@ -14,7 +14,7 @@ cd $version/src
 cmsenv
 git cms-init
 git cms-merge-topic dgaytanv:from-${version}
-scram b -j12
+scram b -j 12
 
 # Note: Here follow the same instructions as in the main reco-prodtools repo, but use the D110 geometry
 git clone git@github.com:dgaytanv/reco-prodtools.git reco_prodtools
