@@ -14,6 +14,8 @@ options.register("nThreads", 1, VarParsing.multiplicity.singleton, VarParsing.va
     "number of threads")
 options.register("runPFTruth", 0, VarParsing.multiplicity.singleton, VarParsing.varType.int,
     "Don't run PFTruth (currently not working with pileup)")
+#options.register("runPFTruth", 1, VarParsing.multiplicity.singleton, VarParsing.varType.int,
+#    "generate PFTruth")
 options.parseArguments()
 
 # import of standard configurations
@@ -22,10 +24,15 @@ process.load('SimGeneral.HepPDTESSource.pythiapdt_cfi')
 process.load('FWCore.MessageService.MessageLogger_cfi')
 process.load('Configuration.EventContent.EventContent_cff')
 process.load('SimGeneral.MixingModule.mixNoPU_cfi')
-process.load('Configuration.Geometry.GeometryExtended2026D49Reco_cff')
-process.load('Configuration.Geometry.GeometryExtended2026D49_cff')
+process.load('Configuration.Geometry.GeometryExtendedRun4D110Reco_cff')
+process.load('Configuration.Geometry.GeometryExtendedRun4D110_cff')
 process.load('Configuration.StandardSequences.MagneticField_cff')
 process.load('DPGAnalysis.HGCalNanoAOD.nanoHGCML_cff')
+#added
+# Fix for ProductNotFound error with FlatEtaRangeGunProducer
+process.tpClusterProducer.pixelSimLinkSrc = cms.InputTag("simSiPixelDigis", "Pixel")
+process.tpClusterProducer.phase2OTSimLinkSrc = cms.InputTag("simSiPixelDigis", "Tracker")
+#added
 process.load('Configuration.StandardSequences.Reconstruction_cff')
 process.load('Configuration.StandardSequences.EndOfProcess_cff')
 process.load('Configuration.StandardSequences.FrontierConditions_GlobalTag_cff')
@@ -48,10 +55,10 @@ process.source = cms.Source("PoolSource",
 )
 
 process.options = cms.untracked.PSet(
-    FailPath = cms.untracked.vstring(),
+#    FailPath = cms.untracked.vstring(),
     IgnoreCompletely = cms.untracked.vstring(),
     Rethrow = cms.untracked.vstring(),
-    SkipEvent = cms.untracked.vstring(),
+#    SkipEvent = cms.untracked.vstring(),
     allowUnscheduled = cms.obsolete.untracked.bool,
     canDeleteEarly = cms.untracked.vstring(),
     emptyRunLumiMode = cms.obsolete.untracked.string,

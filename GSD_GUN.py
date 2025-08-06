@@ -5,19 +5,20 @@ import math
 
 import FWCore.ParameterSet.Config as cms
 from FWCore.ParameterSet.VarParsing import VarParsing
-from reco_prodtools.templates.GSDfineCalo_fragment import process
+#from reco_prodtools.templates.GSDfineCalo_fragment import process
+from reco_prodtools.templates.GSD_fragment import process
 
 # option parsing
 options = VarParsing('python')
 options.setDefault('outputFile', 'file:partGun_PDGid22_x96_Pt1.0To100.0_GSD_1.root')
-options.setDefault('maxEvents', 1)
+options.setDefault('maxEvents', 500)
 options.register("pileup", 0, VarParsing.multiplicity.singleton, VarParsing.varType.int,
     "pileup")
 options.register("seed", 1, VarParsing.multiplicity.singleton, VarParsing.varType.int,
     "random seed")
 options.register("nThreads", 1, VarParsing.multiplicity.singleton, VarParsing.varType.int,
     "number of threads")
-options.register("nParticles", 10, VarParsing.multiplicity.singleton, VarParsing.varType.int,
+options.register("nParticles", 1, VarParsing.multiplicity.singleton, VarParsing.varType.int,
     "number of particles in gun")
 options.parseArguments()
 
@@ -46,11 +47,9 @@ def calculate_rho(z, eta):
 
 
 process.generator = cms.EDProducer("FlatEtaRangeGunProducer",
+    PGunParameters = cms.PSet(
     # particle ids
-    #particleIDs=cms.vint32(22, 22, 11,-11,211,-211,13,-13, 310, 130, 111, 311, 321, -321, -15, 15),
-    particleIDs=cms.vint32(22, 11, 15, -15, 211, -211, -11),
-    #particleIDs=cms.vint32(15,-15),
-    #particleIDs=cms.vint32(22),
+    PartID=cms.vint32(15), #(22, 22, 11,-11,211,-211,13,-13, 310, 130, 111, 311, 321, -321),
     # max number of particles to shoot at a time
     nParticles=cms.int32(options.nParticles),
     # shoot exactly the particles defined in particleIDs in that order
@@ -58,17 +57,45 @@ process.generator = cms.EDProducer("FlatEtaRangeGunProducer",
     # randomly shoot [1, nParticles] particles, each time randomly drawn from particleIDs
     randomShoot=cms.bool(False),
     # energy range
-    eMin=cms.double(20),
-    eMax=cms.double(200.0),
+    MinE=cms.double(200.0),
+    MaxE=cms.double(200.0),
     # phi range
-    phiMin=cms.double(-math.pi),
-    phiMax=cms.double(math.pi),
+    MinPhi=cms.double(-math.pi),
+    MaxPhi=cms.double(math.pi),
     # eta range
-    etaMin=cms.double(1.52),
-    etaMax=cms.double(3.00),
-
+    MinEta=cms.double(1.7),
+    MaxEta=cms.double(2.7),
+    ),
+    AddAntiParticle = cms.bool(False),
     debug=cms.untracked.bool(True),
+    firstRun=cms.untracked.uint32(1)
 )
+
+#process.generator = cms.EDProducer("CloseByParticleGunProducer",
+#    PGunParameters = cms.PSet(PartID = cms.vint32(22), # Since I'm shooting antiparticles, I'm putting gamma and K0 twice in the vector
+#        VarMin = cms.double(100.0),
+#        VarMax = cms.double(100.0),
+#        ControlledByEta = cms.bool(False),
+#        MaxVarSpread = cms.bool(False),
+#        RMin = cms.double(60),
+#        RMax = cms.double(120),
+#        ZMin = cms.double(320), #320#-410
+#        ZMax = cms.double(321),
+#        Delta = cms.double(0),
+#        Pointing = cms.bool(True),
+#        Overlapping = cms.bool(False),
+#        RandomShoot = cms.bool(False),
+#        NParticles = cms.int32(options.nParticles),
+#        MaxEta = cms.double(2.7),
+#        MinEta = cms.double(1.7), #-2.7
+#        MaxPhi = cms.double(3.14159265359),
+#        MinPhi = cms.double(-3.14159265359)
+#    ),
+#    Verbosity = cms.untracked.int32(0),
+#    firstRun = cms.untracked.uint32(1),
+#    AddAntiParticle = cms.bool(False),
+#    psethack = cms.string('Random particles in front of HGCAL')
+#)
 
 process.options.numberOfThreads=cms.untracked.uint32(options.nThreads)
 
