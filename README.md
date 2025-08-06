@@ -22,9 +22,13 @@ cd reco_prodtools/templates/python
 ./produceSkeletons_D110.sh
 cd ../../..
 scram b
+
+# Now copy this repo for nanoML production
+git@github.com:dgaytanv/production_tests.git
+cd production_tests
 ```
 
-Before running the GSD step, you should edit the [GSD_GUN.py](GSD_GUN.py) file to select the number of particles, IDs, and energy range you would like to generate. To activate or deactivate fineCalo, comment out the GSD_fragment with or without finecalo as needed. Then to run the GSD step you do
+Before running the GSD step, you should edit the [GSD_GUN.py](GSD_GUN.py) file to select the number of particles, IDs, and energy range you would like to generate. To activate or deactivate fineCalo, comment out the GSD_fragment with or without finecalo as needed. Then to run the GSD step you do (replace the X with an actual numeric seed)
 
 ```cmsRun GSD_GUN.py seed=X outputFile=testGSD.root```
 
