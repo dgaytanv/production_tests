@@ -24,7 +24,7 @@ cd ../../..
 scram b
 
 # Now copy this repo for nanoML production
-git@github.com:dgaytanv/production_tests.git
+git clone git@github.com:dgaytanv/production_tests.git
 cd production_tests
 ```
 
