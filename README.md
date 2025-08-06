@@ -13,7 +13,7 @@ cmsrel $version
 cd $version/src
 cmsenv
 git cms-init
-git cms-merge-topic cms-pepr:pepr_${version}
+git cms-merge-topic dgaytanv:from-${version}
 scram b -j12
 
 # Note: Here follow the same instructions as in the main reco-prodtools repo, but use the D110 geometry
