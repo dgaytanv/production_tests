@@ -1,8 +1,15 @@
 import FWCore.ParameterSet.Config as cms
+from FWCore.ParameterSet.VarParsing import VarParsing
 from Configuration.Eras.Era_Phase2C17I13M9_cff import Phase2C17I13M9
 from Configuration.ProcessModifiers.ticl_v5_cff import ticl_v5
 
 process = cms.Process('TICL', Phase2C17I13M9, ticl_v5)
+
+# option parsing
+options = VarParsing('python')
+options.setDefault('outputFile', 'testNanoTICL.root')
+options.register("nThreads", 1, VarParsing.multiplicity.singleton, VarParsing.varType.int, "number of threads")
+options.parseArguments()
 
 # Load necessary reconstruction modules
 process.load('Configuration.StandardSequences.Services_cff')
@@ -33,11 +40,10 @@ from RecoHGCal.TICL.ticlDumper_cff import ticlDumper
 #from RecoHGCal.TICL.customiseTICLFromReco import customiseTICLForDumper
 
 
-# Input from RECO file
+# Input source
 process.source = cms.Source("PoolSource",
-    fileNames = cms.untracked.vstring(
-        'file:/afs/cern.ch/work/m/mmarcheg/private/ml4reco/example_ticl/CMSSW_15_1_0/src/production_tests/testRECO_ticlv5.root'
-    )
+    fileNames = cms.untracked.vstring(options.inputFiles),
+    secondaryFileNames = cms.untracked.vstring()
 )
 
 process.maxEvents = cms.untracked.PSet(
