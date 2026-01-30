@@ -2,6 +2,8 @@
 
 import FWCore.ParameterSet.Config as cms
 from FWCore.ParameterSet.VarParsing import VarParsing
+
+# Import process with TICL v5 enabled
 from reco_prodtools.templates.RECO_fragment import process
 
 # option parsing
@@ -24,21 +26,28 @@ process.load("SimTracker.TrackAssociation.trackingParticleRecoTrackAsssociation_
 from SimCalorimetry.HGCalSimProducers.hgcHitAssociation_cfi import lcAssocByEnergyScoreProducer, scAssocByEnergyScoreProducer
 from SimCalorimetry.HGCalAssociatorProducers.LCToCPAssociation_cfi import layerClusterCaloParticleAssociation as layerClusterCaloParticleAssociationProducer
 from SimCalorimetry.HGCalAssociatorProducers.LCToSCAssociation_cfi import layerClusterSimClusterAssociation as layerClusterSimClusterAssociationProducer
+from SimGeneral.TrackingAnalysis.simHitTPAssociation_cfi import simHitTPAssocProducer
 
 process.lcAssocByEnergyScoreProducer = lcAssocByEnergyScoreProducer
 process.layerClusterCaloParticleAssociationProducer = layerClusterSimClusterAssociationProducer
 process.scAssocByEnergyScoreProducer = scAssocByEnergyScoreProducer
 process.layerClusterSimClusterAssociationProducer = layerClusterCaloParticleAssociationProducer
+process.simHitTPAssocProducer = simHitTPAssocProducer
 
-process.hgcalAssociators = cms.Task(process.lcAssocByEnergyScoreProducer, process.layerClusterCaloParticleAssociationProducer,
-    process.scAssocByEnergyScoreProducer, process.layerClusterSimClusterAssociationProducer,
-    process.trackingParticleRecoTrackAsssociation
+process.hgcalAssociators = cms.Task(
+    process.lcAssocByEnergyScoreProducer,
+    process.layerClusterCaloParticleAssociationProducer,
+    process.scAssocByEnergyScoreProducer,
+    process.layerClusterSimClusterAssociationProducer,
+    process.trackingParticleRecoTrackAsssociation,
+    process.simHitTPAssocProducer
 )
 
 process.assoc = cms.Sequence(process.hgcalAssociators)
 
 process.recosim_step *= process.assoc
 
+# Print out event content for debugging
 #process.dump=cms.EDAnalyzer('EventContentAnalyzer')
 #process.recosim_step += process.dump
 
@@ -60,6 +69,13 @@ process.FEVTDEBUGoutput.outputCommands.extend(["keep *_MergedTrackTruth_*_*",
     "keep *_layerClusterCaloParticleAssociationProducer_*_*",
     "keep *_scAssocByEnergyScoreProducer_*_*",
     "keep *_layerClusterSimClusterAssociationProducer_*_*",
+    "keep *_filteredLayerClusters*_*_*",
+    "keep *_ticlSeeding*_*_*",
+    "keep *_ticlTracksters*_*_*",
+    "keep *_ticlCandidate*_*_*",
+    "keep *_muons*_*_*",
+    "keep *_simTrack*_*_*",
+    "keep *_simHit*_*_*",
 ])
 
 process.options.numberOfThreads=cms.untracked.uint32(options.nThreads)

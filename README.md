@@ -5,6 +5,7 @@ This is an updated fork of https://github.com/kdlong/production_tests, which are
 
 NOTE: The NanoML ntuples require pepr_CMSSW_15_0_0 (some older pepr_CMSSW_X_Y_Z branches are available, if you prefer, in the original cms-pepr repo at https://github.com/cms-pepr/cmssw/tree/pepr_CMSSW_12_6_0_pre2). A version compatible with fineCalo is currently in progress.
 
+## Setup
 A simple recipe in CMSSW_15_0_0 is:
 
 ```shell
@@ -17,6 +18,7 @@ git cms-merge-topic dgaytanv:from-${version}
 scram b -j 12
 
 # Note: Here follow the same instructions as in the main reco-prodtools repo, but use the D110 geometry
+# Create RECO fragment
 git clone git@github.com:dgaytanv/reco-prodtools.git reco_prodtools
 cd reco_prodtools/templates/python
 ./produceSkeletons_D110.sh
@@ -41,4 +43,32 @@ For the NanoML ntuples, you should use the configurations [nanoML_cfg.py](nanoML
 Then you run them in the expected way
 
 ```cmsRun nanoML_cfg.py inputFiles=file:testRECO.root outputFile=testNanoML.root```
+
+## Save TICL reconstruction
+To save the output of the TICL reconstruction, you need to follow this recipe:
+```
+version=CMSSW_15_1_0
+cmsrel $version
+cd $version/src
+cmsenv
+git cms-init
+git cms-merge-topic dgaytanv:CMSSW_15_1_0_flatEta # CMSSW_15_1_0 port of FlatEtaRangeGun producer
+scram b -j 12
+
+# Note: Here follow the same instructions as in the main reco-prodtools repo, but use the D110 geometry
+# Create RECO fragment with TICLv5 modifier
+git clone git@github.com:mmarchegiani/reco-prodtools.git reco_prodtools
+cd reco_prodtools/templates/python
+./produceSkeletons_D110_ticlv5.sh
+cd ../../..
+scram b
+
+# Now copy this repo for nanoML production
+git clone git@github.com:mmarchegiani/production_tests.git
+cd production_tests
+```
+
+Run the `GSD_GUN` and `RECO` steps as in the default setup.
+To run the TICL reconstruction of HGCAL hits and save the output, run the following command:
+```cmsRun runTICLCandidates_cfg.py inputFiles=file:testRECO.root```
 
