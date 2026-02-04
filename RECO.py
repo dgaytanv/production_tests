@@ -3,9 +3,6 @@
 import FWCore.ParameterSet.Config as cms
 from FWCore.ParameterSet.VarParsing import VarParsing
 
-# Import process with TICL v5 enabled
-from reco_prodtools.templates.RECO_fragment import process
-
 # option parsing
 options = VarParsing('python')
 options.setDefault('outputFile', 'file:partGun_PDGid22_x96_Pt1.0To100.0_RECO_1.root')
@@ -16,6 +13,15 @@ options.register('outputFileDQM', 'file:partGun_PDGid22_x96_Pt1.0To100.0_DQM_1.r
 options.register("nThreads", 1, VarParsing.multiplicity.singleton, VarParsing.varType.int,
     "number of threads")
 options.parseArguments()
+options.register("useTICL", 0, VarParsing.multiplicity.singleton, VarParsing.varType.int,
+    "use TICL v5 (1=True, 0=False)")
+options.parseArguments()
+
+# Import process based on useTICL flag
+if options.useTICL:
+    from reco_prodtools.templates.RECOticlV5_fragment import process
+else:
+    from reco_prodtools.templates.RECO_fragment import process
 
 process.maxEvents.input = cms.untracked.int32(options.maxEvents)
 

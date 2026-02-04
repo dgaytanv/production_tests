@@ -21,7 +21,7 @@ scram b -j 12
 # Create RECO fragment
 git clone git@github.com:dgaytanv/reco-prodtools.git reco_prodtools
 cd reco_prodtools/templates/python
-./produceSkeletons_D110.sh
+./produceSkeletons_D110_v2.sh
 cd ../../..
 scram b
 
@@ -30,7 +30,7 @@ git clone git@github.com:dgaytanv/production_tests.git
 cd production_tests
 ```
 
-Before running the GSD step, you should edit the [GSD_GUN.py](GSD_GUN.py) file to select the number of particles, IDs, and energy range you would like to generate. To activate or deactivate fineCalo, comment out the GSD_fragment with or without finecalo as needed. Then to run the GSD step you do (replace the X with an actual numeric seed)
+Before running the GSD step, you should edit the [GSD_GUN.py](GSD_GUN.py) file to select the number of particles, IDs, and energy range you would like to generate. To activate or deactivate fineCalo, use the useFineCalo flag (by default useFineCalo=1). Then to run the GSD step you do (replace the X with an actual numeric seed)
 
 ```cmsRun GSD_GUN.py seed=X outputFile=testGSD.root```
 
@@ -38,37 +38,20 @@ Then process the output of this using the RECO config
 
 ```cmsRun RECO.py inputFiles=file:testGSD.root outputFile=testRECO.root```
 
-For the NanoML ntuples, you should use the configurations [nanoML_cfg.py](nanoML_cfg.py) for samples with RECO content. Conversely, use [nanoMLGSD_cfg.py](nanoMLGSD_cfg) if you have a file with only GEN content. Several aspects of this are configurable (store simclusters or not, store merged simclusters or not). configureX functions in the configuration take care of this. This will be made configurable at some point, but open the configuration file and edit to include or not these functions for now. Note: at the moment, only files with RECO content have been tested for CMSSW_15_0_0 and newer.
+For the NanoML ntuples, you should use the configurations [nanoML_cfg.py](nanoML_cfg.py) for samples with RECO content.
+
+<!-- (Conversely, use [nanoMLGSD_cfg.py](nanoMLGSD_cfg) if you have a file with only GEN content. Several aspects of this are configurable (store simclusters or not, store merged simclusters or not). configureX functions in the configuration take care of this. This will be made configurable at some point, but open the configuration file and edit to include or not these functions for now. Note: at the moment, only files with RECO content have been tested for CMSSW_15_0_0 and newer.) -->
 
 Then you run them in the expected way
 
 ```cmsRun nanoML_cfg.py inputFiles=file:testRECO.root outputFile=testNanoML.root```
 
 ## Save TICL reconstruction
-To save the output of the TICL reconstruction, you need to follow this recipe:
-```
-version=CMSSW_15_1_0
-cmsrel $version
-cd $version/src
-cmsenv
-git cms-init
-git cms-merge-topic dgaytanv:CMSSW_15_1_0_flatEta # CMSSW_15_1_0 port of FlatEtaRangeGun producer
-scram b -j 12
+To save the output of the TICL reconstruction, run the RECO step with the useTICL flag (by default useTICL=0)
 
-# Note: Here follow the same instructions as in the main reco-prodtools repo, but use the D110 geometry
-# Create RECO fragment with TICLv5 modifier
-git clone git@github.com:mmarchegiani/reco-prodtools.git reco_prodtools
-cd reco_prodtools/templates/python
-./produceSkeletons_D110_ticlv5.sh
-cd ../../..
-scram b
+```cmsRun RECO.py inputFiles=file:testGSD.root outputFile=testRECO-TICL.root useTICL=1```
 
-# Now copy this repo for nanoML production
-git clone git@github.com:mmarchegiani/production_tests.git
-cd production_tests
-```
 
-Run the `GSD_GUN` and `RECO` steps as in the default setup.
-To run the TICL reconstruction of HGCAL hits and save the output, run the following command:
-```cmsRun runTICLCandidates_cfg.py inputFiles=file:testRECO.root```
+To produce a rootfile containing the TICL candidates information ONLY, use the RECO output as input for [nanoTICL_cfg.py](nanoTICL_cfg.py)
 
+```cmsRun nanoTICL_cfg.py inputFiles=file:testRECO-TICL.root outputFile=testTICL.root```
