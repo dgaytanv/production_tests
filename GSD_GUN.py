@@ -9,7 +9,7 @@ from FWCore.ParameterSet.VarParsing import VarParsing
 # option parsing
 options = VarParsing('python')
 options.setDefault('outputFile', 'file:partGun_PDGid22_x96_Pt1.0To100.0_GSD_1.root')
-options.setDefault('maxEvents', 500)
+options.setDefault('maxEvents', 10)
 options.register("pileup", 0, VarParsing.multiplicity.singleton, VarParsing.varType.int,
     "pileup")
 options.register("seed", 1, VarParsing.multiplicity.singleton, VarParsing.varType.int,
