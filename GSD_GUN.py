@@ -5,8 +5,6 @@ import math
 
 import FWCore.ParameterSet.Config as cms
 from FWCore.ParameterSet.VarParsing import VarParsing
-#from reco_prodtools.templates.GSDfineCalo_fragment import process
-from reco_prodtools.templates.GSD_fragment import process
 
 # option parsing
 options = VarParsing('python')
@@ -21,6 +19,15 @@ options.register("nThreads", 1, VarParsing.multiplicity.singleton, VarParsing.va
 options.register("nParticles", 1, VarParsing.multiplicity.singleton, VarParsing.varType.int,
     "number of particles in gun")
 options.parseArguments()
+options.register("useFineCalo", 1, VarParsing.multiplicity.singleton, VarParsing.varType.int,
+    "use fine calorimeter segmentation (1=True, 0=False)")
+options.parseArguments()
+
+# Import process based on useFineCalo flag
+if options.useFineCalo:
+    from reco_prodtools.templates.GSDfineCalo_fragment import process
+else:
+    from reco_prodtools.templates.GSD_fragment import process
 
 process.maxEvents.input = cms.untracked.int32(options.maxEvents)
 
