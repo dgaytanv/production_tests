@@ -12,7 +12,6 @@ options.register('outputFileDQM', 'file:partGun_PDGid22_x96_Pt1.0To100.0_DQM_1.r
     VarParsing.multiplicity.singleton, VarParsing.varType.string, 'path to the DQM output file')
 options.register("nThreads", 1, VarParsing.multiplicity.singleton, VarParsing.varType.int,
     "number of threads")
-options.parseArguments()
 options.register("useTICL", 0, VarParsing.multiplicity.singleton, VarParsing.varType.int,
     "use TICL v5 (1=True, 0=False)")
 options.parseArguments()
