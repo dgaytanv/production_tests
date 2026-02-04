@@ -21,7 +21,7 @@ scram b -j 12
 # Create RECO fragment
 git clone git@github.com:dgaytanv/reco-prodtools.git reco_prodtools
 cd reco_prodtools/templates/python
-./produceSkeletons_D110.sh
+./produceSkeletons_D110_v2.sh
 cd ../../..
 scram b
 
@@ -45,30 +45,11 @@ Then you run them in the expected way
 ```cmsRun nanoML_cfg.py inputFiles=file:testRECO.root outputFile=testNanoML.root```
 
 ## Save TICL reconstruction
-To save the output of the TICL reconstruction, you need to follow this recipe:
-```
-version=CMSSW_15_1_0
-cmsrel $version
-cd $version/src
-cmsenv
-git cms-init
-git cms-merge-topic dgaytanv:CMSSW_15_1_0_flatEta # CMSSW_15_1_0 port of FlatEtaRangeGun producer
-scram b -j 12
+To save the output of the TICL reconstruction, run the RECO step with the useTICL flag (by default useTICL=0):
 
-# Note: Here follow the same instructions as in the main reco-prodtools repo, but use the D110 geometry
-# Create RECO fragment with TICLv5 modifier
-git clone git@github.com:mmarchegiani/reco-prodtools.git reco_prodtools
-cd reco_prodtools/templates/python
-./produceSkeletons_D110_ticlv5.sh
-cd ../../..
-scram b
+```cmsRun RECO.py inputFiles=file:testGSD.root outputFile=testRECO-TICL.root useTICL=1```
 
-# Now copy this repo for nanoML production
-git clone git@github.com:mmarchegiani/production_tests.git
-cd production_tests
-```
 
-Run the `GSD_GUN` and `RECO` steps as in the default setup.
-To run the TICL reconstruction of HGCAL hits and save the output, run the following command:
-```cmsRun runTICLCandidates_cfg.py inputFiles=file:testRECO.root```
+To produce a rootfile containing the TICL candidates information ONLY, use the RECO output as input for [nanoTICL_cfg.py](nanoTICL_cfg.py):
 
+```cmsRun nanoTICL_cfg.py inputFiles=file:testRECO-TICL.root outputFile=testTICL.root```
