@@ -146,20 +146,6 @@ if hasattr(process, 'genParticleTable'):
         del process.genParticleTable.externalVariables.iso
 
 # Path and EndPath definitions
-#process.nanoAOD_step = cms.Path(process.nanoHGCMLSequence)
-#process.ticlDumper_step = cms.EndPath(process.ticlDumper)
-#process.endjob_step = cms.EndPath(process.endOfProcess)
-#process.NANOAODSIMoutput_step = cms.EndPath(process.NANOAODSIMoutput)
-
-# Schedule definition - NanoML processing first, then TICL dumper, then output
-#process.schedule = cms.Schedule(
-#    process.nanoAOD_step,
-#    process.ticlDumper_step,
-#    process.endjob_step,
-#    process.NANOAODSIMoutput_step
-#)
-
-# Path and EndPath definitions
 process.nanoAOD_step = cms.Path(process.nanoHGCMLSequence)
 process.endjob_step = cms.EndPath(process.endOfProcess)
 process.NANOAODSIMoutput_step = cms.EndPath(process.NANOAODSIMoutput)
