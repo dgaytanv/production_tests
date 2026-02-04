@@ -3,7 +3,7 @@
 This is an updated fork of https://github.com/kdlong/production_tests, which are simple productions scripts based on the HGCAL Reco prod tools: https://github.com/CMS-HGCAL/reco-prodtools. 
 
 
-NOTE: The NanoML ntuples require pepr_CMSSW_15_0_0 or pepr_CMSSW_15_1_1 (some older pepr_CMSSW_X_Y_Z branches are available, if you prefer, in the original cms-pepr repo at https://github.com/cms-pepr/cmssw/tree/pepr_CMSSW_12_6_0_pre2). A version compatible with fineCalo is currently in progress.
+NOTE: The NanoML ntuples require pepr_CMSSW_15_0_0 or pepr_CMSSW_15_1_1 (some older pepr_CMSSW_X_Y_Z branches are available, if you prefer, in the original cms-pepr repo at https://github.com/cms-pepr/cmssw/tree/pepr_CMSSW_12_6_0_pre2).
 
 ## Setup
 A simple recipe in CMSSW_15_1_0 is:
