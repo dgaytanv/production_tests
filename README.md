@@ -40,7 +40,7 @@ Then process the output of this using the RECO config
 
 For the NanoML ntuples, you should use the configurations [nanoML_cfg.py](nanoML_cfg.py) for samples with RECO content.
 
-[comment]: # (Conversely, use [nanoMLGSD_cfg.py](nanoMLGSD_cfg) if you have a file with only GEN content. Several aspects of this are configurable (store simclusters or not, store merged simclusters or not). configureX functions in the configuration take care of this. This will be made configurable at some point, but open the configuration file and edit to include or not these functions for now. Note: at the moment, only files with RECO content have been tested for CMSSW_15_0_0 and newer.) 
+<!-- (Conversely, use [nanoMLGSD_cfg.py](nanoMLGSD_cfg) if you have a file with only GEN content. Several aspects of this are configurable (store simclusters or not, store merged simclusters or not). configureX functions in the configuration take care of this. This will be made configurable at some point, but open the configuration file and edit to include or not these functions for now. Note: at the moment, only files with RECO content have been tested for CMSSW_15_0_0 and newer.) -->
 
 Then you run them in the expected way
 
