@@ -30,7 +30,7 @@ git clone git@github.com:dgaytanv/production_tests.git
 cd production_tests
 ```
 
-Before running the GSD step, you should edit the [GSD_GUN.py](GSD_GUN.py) file to select the number of particles, IDs, and energy range you would like to generate. To activate or deactivate fineCalo, comment out the GSD_fragment with or without finecalo as needed. Then to run the GSD step you do (replace the X with an actual numeric seed)
+Before running the GSD step, you should edit the [GSD_GUN.py](GSD_GUN.py) file to select the number of particles, IDs, and energy range you would like to generate. To activate or deactivate fineCalo, use the useFineCalo flag (by default useFineCalo=1). Then to run the GSD step you do (replace the X with an actual numeric seed)
 
 ```cmsRun GSD_GUN.py seed=X outputFile=testGSD.root```
 
@@ -47,11 +47,11 @@ Then you run them in the expected way
 ```cmsRun nanoML_cfg.py inputFiles=file:testRECO.root outputFile=testNanoML.root```
 
 ## Save TICL reconstruction
-To save the output of the TICL reconstruction, run the RECO step with the useTICL flag (by default useTICL=0):
+To save the output of the TICL reconstruction, run the RECO step with the useTICL flag (by default useTICL=0)
 
 ```cmsRun RECO.py inputFiles=file:testGSD.root outputFile=testRECO-TICL.root useTICL=1```
 
 
-To produce a rootfile containing the TICL candidates information ONLY, use the RECO output as input for [nanoTICL_cfg.py](nanoTICL_cfg.py):
+To produce a rootfile containing the TICL candidates information ONLY, use the RECO output as input for [nanoTICL_cfg.py](nanoTICL_cfg.py)
 
 ```cmsRun nanoTICL_cfg.py inputFiles=file:testRECO-TICL.root outputFile=testTICL.root```
