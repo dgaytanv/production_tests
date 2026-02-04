@@ -18,7 +18,6 @@ options.register("nThreads", 1, VarParsing.multiplicity.singleton, VarParsing.va
     "number of threads")
 options.register("nParticles", 1, VarParsing.multiplicity.singleton, VarParsing.varType.int,
     "number of particles in gun")
-options.parseArguments()
 options.register("useFineCalo", 1, VarParsing.multiplicity.singleton, VarParsing.varType.int,
     "use fine calorimeter segmentation (1=True, 0=False)")
 options.parseArguments()
