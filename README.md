@@ -56,7 +56,7 @@ To produce a rootfile containing the TICL candidates information ONLY, use the R
 
 ```cmsRun nanoTICL_cfg.py inputFiles=file:testRECO-TICL.root outputFile=testTICL.root```
 
-To produce the two rootfiles at the same time, i.e one with the nanoML output and one with the TICL output, run the merged TICL-ML configuration
+To produce the two rootfiles at the same time, i.e one with the nanoML output and one with the TICL output, run the merged TICL-ML configuration [nanoTICL-ML_cfg.py](nanoTICL-ML_cfg.py)
 
 ```cmsRun nanoTICL-ML_cfg.py inputFiles=file:testRECO-TICL.root outputFile=output.root```
 
