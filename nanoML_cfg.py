@@ -14,8 +14,6 @@ options.register("nThreads", 1, VarParsing.multiplicity.singleton, VarParsing.va
     "number of threads")
 options.register("runPFTruth", 0, VarParsing.multiplicity.singleton, VarParsing.varType.int,
     "Don't run PFTruth (currently not working with pileup)")
-#options.register("runPFTruth", 1, VarParsing.multiplicity.singleton, VarParsing.varType.int,
-#    "generate PFTruth")
 options.parseArguments()
 
 # import of standard configurations
@@ -28,11 +26,11 @@ process.load('Configuration.Geometry.GeometryExtendedRun4D110Reco_cff')
 process.load('Configuration.Geometry.GeometryExtendedRun4D110_cff')
 process.load('Configuration.StandardSequences.MagneticField_cff')
 process.load('DPGAnalysis.HGCalNanoAOD.nanoHGCML_cff')
-#added
-# Fix for ProductNotFound error with FlatEtaRangeGunProducer
-process.tpClusterProducer.pixelSimLinkSrc = cms.InputTag("simSiPixelDigis", "Pixel")
-process.tpClusterProducer.phase2OTSimLinkSrc = cms.InputTag("simSiPixelDigis", "Tracker")
-#added
+
+# specify where to look for simSiPixelDigis objects
+process.tpClusterProducer.pixelSimLinkSrc = cms.InputTag("simSiPixelDigis", "Pixel", "HLT")
+process.tpClusterProducer.phase2OTSimLinkSrc = cms.InputTag("simSiPixelDigis", "Tracker", "HLT")
+
 process.load('Configuration.StandardSequences.Reconstruction_cff')
 process.load('Configuration.StandardSequences.EndOfProcess_cff')
 process.load('Configuration.StandardSequences.FrontierConditions_GlobalTag_cff')
@@ -55,10 +53,8 @@ process.source = cms.Source("PoolSource",
 )
 
 process.options = cms.untracked.PSet(
-#    FailPath = cms.untracked.vstring(),
     IgnoreCompletely = cms.untracked.vstring(),
     Rethrow = cms.untracked.vstring(),
-#    SkipEvent = cms.untracked.vstring(),
     allowUnscheduled = cms.obsolete.untracked.bool,
     canDeleteEarly = cms.untracked.vstring(),
     emptyRunLumiMode = cms.obsolete.untracked.string,
@@ -78,7 +74,8 @@ process.options = cms.untracked.PSet(
     printDependencies = cms.untracked.bool(False),
     sizeOfStackForThreadsInKB = cms.optional.untracked.uint32,
     throwIfIllegalParameter = cms.untracked.bool(True),
-    wantSummary = cms.untracked.bool(False)
+    wantSummary = cms.untracked.bool(False),
+    TryToContinue = cms.untracked.vstring('ProductNotFound') #continue even if a product is not found
 )
 
 # Production Info
@@ -113,6 +110,12 @@ process.GlobalTag = GlobalTag(process.GlobalTag, 'auto:mc', '')
 process.nanoAOD_step = cms.Path(process.nanoHGCMLSequence)
 process.endjob_step = cms.EndPath(process.endOfProcess)
 process.NANOAODSIMoutput_step = cms.EndPath(process.NANOAODSIMoutput)
+
+#omit genIso objects to avoid product not found error (objects only available at mininanoaod step)
+if hasattr(process, 'genParticleTable'):
+    # Remove the 'iso' variable from the table configuration
+    if hasattr(process.genParticleTable.externalVariables, 'iso'):
+        del process.genParticleTable.externalVariables.iso
 
 # Schedule definition
 process.schedule = cms.Schedule(process.nanoAOD_step,process.endjob_step,process.NANOAODSIMoutput_step)

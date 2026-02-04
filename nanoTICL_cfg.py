@@ -54,29 +54,9 @@ process.trackdnn_source = trackdnn_source
 process.layerClusterCaloParticleAssociationProducer = layerClusterCaloParticleAssociationProducer
 process.layerClusterSimClusterAssociationProducer = layerClusterSimClusterAssociationProducer
 
-# Debug output
-process.FEVTDEBUGHLToutput = cms.OutputModule("PoolOutputModule",
-    dataset = cms.untracked.PSet(
-        dataTier = cms.untracked.string('GEN-SIM-RECO'),
-        filterName = cms.untracked.string('')
-    ),
-    fileName = cms.untracked.string('file:output_with_ticlcandidates.root'),
-    outputCommands = process.FEVTDEBUGHLTEventContent.outputCommands,
-    splitLevel = cms.untracked.int32(0)
-)
 
 # Apply TICLv5 customization
 process = customiseTICLv5FromReco(process, enableDumper=True)
-
-# Configure the TICL dumper to save desired information
-#from RecoHGCal.TICL.customiseTICLFromReco import customiseTICLForDumper
-#process = customiseTICLForDumper(process, histoName = "histo.root")
-#process.ticlDumper.saveLCs = True
-#process.ticlDumper.saveTICLCandidate = True
-#process.ticlDumper.saveSimTICLCandidate = True
-#process.ticlDumper.saveTracks = True
-#process.ticlDumper.saveSuperclustering = True
-#process.ticlDumper.saveRecoSuperclusters = True
 
 # TICLDumper
 process.ticlDumper = ticlDumper.clone(
@@ -87,30 +67,10 @@ process.ticlDumper = ticlDumper.clone(
     saveSuperclustering=False,
     saveRecoSuperclusters=False,
 )
-process.TFileService = cms.Service("TFileService",
-                                    fileName=cms.string("histo.root")
+process.TFileService = cms.Service("TFileService", fileName=cms.string(options.__getattr__("outputFile", noTags=True))
                                     )
 process.ticlDumper_step = cms.EndPath(process.ticlDumper)
 
 # Add ticlDumper_step as last step in the schedule
 process.schedule.append(process.ticlDumper_step)
-
-# Output
-process.NANOAODSIMoutput = cms.OutputModule("NanoAODOutputModule",
-    compressionAlgorithm = cms.untracked.string('LZMA'),
-    compressionLevel = cms.untracked.int32(9),
-    dataset = cms.untracked.PSet(
-        dataTier = cms.untracked.string('NANOAODSIM'),
-        filterName = cms.untracked.string('')
-    ),
-    fileName = cms.untracked.string('file:nanoAOD_with_ticlcandidates.root'),
-    outputCommands = process.NANOAODSIMEventContent.outputCommands
-)
-
-process.NANOAODSIMoutput.outputCommands.remove("keep edmTriggerResults_*_*_*")
-
-# Path and EndPath definitions
-process.NANOAODSIMoutput_step = cms.EndPath(process.NANOAODSIMoutput)
-
-process.schedule.append(process.NANOAODSIMoutput_step)
 
