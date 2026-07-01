@@ -61,3 +61,59 @@ To produce the two rootfiles at the same time, i.e one with the nanoML output an
 ```cmsRun nanoTICL-ML_cfg.py inputFiles=file:testRECO-TICL.root outputFile=output.root```
 
 This creates two files: ```output.root``` and ```output_ticl.root```.
+
+---
+
+## CMSSW_20_0_0_pre1 / Run4D121
+
+For CMSSW_20_0_0_pre1 with the D121 geometry, use the following recipe
+instead of the CMSSW_15_1_0 recipe above. This recipe lives on branch
+`pre1_D121`; the `master` branch remains on CMSSW_15_1_0.
+
+```shell
+export SCRAM_ARCH=el9_amd64_gcc13
+version=CMSSW_20_0_0_pre1
+cmsrel $version
+cd $version/src
+cmsenv
+git cms-init -y
+git cms-merge-topic dgaytanv:pepr_${version}
+scram b -j 4      # -j 12 can OOM on cmslpc
+
+git clone git@github.com:dgaytanv/reco-prodtools.git reco_prodtools
+cd reco_prodtools/templates/python
+./produceSkeletons_D121.sh
+cd ../../..
+
+git clone -b pre1_D121 git@github.com:dgaytanv/production_tests.git
+cd production_tests
+```
+
+### Key differences from CMSSW_15_1_0
+
+The pre1 configs (`GSD_GUN.py`, `RECO.py`, `nanoML_cfg.py`) are updated to:
+
+- **Geometry**: `ExtendedRun4D110` → `ExtendedRun4D121` (default in pre1)
+- **Gun plugin name**: `FlatEtaRangeGunProducer` → `edm::FlatEtaRangeGunProducer`
+  (namespace prefix required by pre1 plugin registration)
+- **`RECO.py` `useTICL` branch**: no-op. `ticl_v5` procModifier was removed
+  in pre1 (TICL is default now), so both branches use `RECO_fragment.py`.
+
+The pepr fork for pre1 also includes:
+
+- `FlatEtaRangeGunProducer::fillDescriptions()` (required for pre1 param
+  validation)
+- `SimpleFlatTableProducerFromCollection<T>` (exact-type variant, used for
+  SimCluster/CaloParticle tables to avoid an AmbiguousProduct exception
+  triggered by pre1's `CaloTruthAccumulator` emitting both `vector<SimCluster>`
+  and `RefVector<SimCluster>` under `mix:MergedCaloTruth`)
+- `skipNonExistingSrc` and `lazyEval` params added to the SimCluster and
+  CaloParticle cfi configs, required by the new producer
+
+### Running (same as before)
+
+```shell
+cmsRun GSD_GUN.py seed=1 outputFile=testGSD.root maxEvents=5
+cmsRun RECO.py inputFiles=file:testGSD.root outputFile=testRECO.root
+cmsRun nanoML_cfg.py inputFiles=file:testRECO.root outputFile=testNanoML.root
+```

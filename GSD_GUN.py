@@ -52,7 +52,7 @@ def calculate_rho(z, eta):
     return z * math.tan(2 * math.atan(math.exp(-eta)))
 
 
-process.generator = cms.EDProducer("FlatEtaRangeGunProducer",
+process.generator = cms.EDProducer("edm::FlatEtaRangeGunProducer",
     PGunParameters = cms.PSet(
     # particle ids
     PartID=cms.vint32(15), #(22, 22, 11,-11,211,-211,13,-13, 310, 130, 111, 311, 321, -321),

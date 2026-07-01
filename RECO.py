@@ -18,7 +18,7 @@ options.parseArguments()
 
 # Import process based on useTICL flag
 if options.useTICL:
-    from reco_prodtools.templates.RECOticlV5_fragment import process
+    from reco_prodtools.templates.RECO_fragment import process  # ticl_v5 no longer exists; TICL is default in pre1
 else:
     from reco_prodtools.templates.RECO_fragment import process
 
