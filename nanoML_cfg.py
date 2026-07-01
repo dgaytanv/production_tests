@@ -94,11 +94,13 @@ process.NANOAODSIMoutput = cms.OutputModule("NanoAODOutputModule",
         dataTier = cms.untracked.string('NANOAODSIM'),
         filterName = cms.untracked.string('')
     ),
-    fileName = cms.untracked.string(options.outputFile),
+    fileName = cms.untracked.string(options.__getattr__("outputFile", noTags=True)),
     outputCommands = process.NANOAODSIMEventContent.outputCommands
 )
 
 process.NANOAODSIMoutput.outputCommands.remove("keep edmTriggerResults_*_*_*")
+# Keep the TICLCand table produced by ticl_step (not in default NANOAODSIMEventContent).
+process.NANOAODSIMoutput.outputCommands.append("keep nanoaodFlatTable_ticl*_*_*")
 
 # Additional output definition
 
@@ -106,8 +108,112 @@ process.NANOAODSIMoutput.outputCommands.remove("keep edmTriggerResults_*_*_*")
 from Configuration.AlCa.GlobalTag import GlobalTag
 process.GlobalTag = GlobalTag(process.GlobalTag, 'auto:mc', '')
 
+# TICL nano tables (added for CMSSW_20_0_0_pre1 / D121).
+#
+# TICL is the default reco in pre1. Its products (ticlCandidate,
+# ticlTrackstersCLUE3DHigh, ticlTracksterLinks, ticlTrackstersRecovery,
+# hgcalMergeLayerClusters) are always in RECO output.
+#
+# The plugins that emit nano tables for these are in HLTrigger/NGTScouting
+# (originally written for HLT scouting) and are already registered in
+# pluginHLTriggerNGTScoutingAuto.so. We wire them here with offline input
+# tags. This gives us the full offline chain:
+#     RecHit -> LayerCluster  (RecHitHGC_LayerCluster_MatchIdx, in nano)
+#     LayerCluster -> Trackster  (via tracksterVertices in trackster table)
+#     Trackster -> TICLCand  (via Candidate2TrackstersIndices)
+process.ticlCandidateTable = cms.EDProducer("TICLCandidateTableProducer",
+    skipNonExistingSrc=cms.bool(True),
+    src=cms.InputTag("ticlCandidate"),
+    cut=cms.string(""),
+    name=cms.string("TICLCand"),
+    doc=cms.string("Offline TICLCandidates (from ticlCandidate producer)"),
+    singleton=cms.bool(False),
+    variables=cms.PSet(
+        raw_energy=cms.PSet(expr=cms.string("rawEnergy"), type=cms.string("float"), doc=cms.string("Raw energy [GeV]"), precision=cms.int32(-1)),
+        pt=cms.PSet(expr=cms.string("pt"), type=cms.string("float"), doc=cms.string("pT [GeV]"), precision=cms.int32(-1)),
+        p=cms.PSet(expr=cms.string("p"), type=cms.string("float"), doc=cms.string("|p| [GeV]"), precision=cms.int32(-1)),
+        energy=cms.PSet(expr=cms.string("energy"), type=cms.string("float"), doc=cms.string("Energy [GeV]"), precision=cms.int32(-1)),
+        eta=cms.PSet(expr=cms.string("eta"), type=cms.string("float"), doc=cms.string("eta"), precision=cms.int32(-1)),
+        phi=cms.PSet(expr=cms.string("phi"), type=cms.string("float"), doc=cms.string("phi"), precision=cms.int32(-1)),
+        mass=cms.PSet(expr=cms.string("mass"), type=cms.string("float"), doc=cms.string("mass"), precision=cms.int32(-1)),
+        pdgID=cms.PSet(expr=cms.string("pdgId"), type=cms.string("int"), doc=cms.string("pdgId"), precision=cms.int32(-1)),
+        charge=cms.PSet(expr=cms.string("charge"), type=cms.string("int"), doc=cms.string("charge"), precision=cms.int32(-1)),
+        time=cms.PSet(expr=cms.string("time"), type=cms.string("float"), doc=cms.string("HGCAL time"), precision=cms.int32(-1)),
+        timeError=cms.PSet(expr=cms.string("timeError"), type=cms.string("float"), doc=cms.string("HGCAL time error"), precision=cms.int32(-1)),
+    ),
+)
+
+# TICLCand -> linked Tracksters (Candidate2TrackstersIndices)
+process.ticlCandidateExtraTable = cms.EDProducer("TICLCandidateExtraTableProducer",
+    src=cms.InputTag("ticlCandidate"),
+    name=cms.string("Candidate2Tracksters"),
+    skipNonExistingSrc=cms.bool(True),
+    doc=cms.string("TICLCandidates extra table with linked Tracksters"),
+    collectionVariables=cms.PSet(
+        tracksters=cms.PSet(
+            name=cms.string("Candidate2TrackstersIndices"),
+            doc=cms.string("Tracksters linked to TICLCandidates"),
+            useCount=cms.bool(True),
+            useOffset=cms.bool(False),
+            variables=cms.PSet(),
+        ),
+    ),
+)
+
+# Trackster tables for each offline TICL iteration: gives us the
+# LayerCluster<->Trackster link via the `vertices` collection variable.
+_ticlIterLabels = ["ticlTrackstersCLUE3DHigh", "ticlTrackstersRecovery",
+                   "ticlTracksterLinks", "ticlTracksterLinksSuperclusteringDNN"]
+
+_tracksterTableProducers = []
+for _iterLabel in _ticlIterLabels:
+    _prod = cms.EDProducer("TracksterCollectionTableProducer",
+        skipNonExistingSrc=cms.bool(True),
+        src=cms.InputTag(_iterLabel),
+        cut=cms.string(""),
+        name=cms.string(_iterLabel),
+        doc=cms.string(_iterLabel),
+        singleton=cms.bool(False),
+        variables=cms.PSet(
+            raw_energy=cms.PSet(expr=cms.string("raw_energy"), type=cms.string("float"), doc=cms.string("Raw energy [GeV]"), precision=cms.int32(-1)),
+            raw_em_energy=cms.PSet(expr=cms.string("raw_em_energy"), type=cms.string("float"), doc=cms.string("EM raw energy [GeV]"), precision=cms.int32(-1)),
+            raw_pt=cms.PSet(expr=cms.string("raw_pt"), type=cms.string("float"), doc=cms.string("Raw pT [GeV]"), precision=cms.int32(-1)),
+            regressed_energy=cms.PSet(expr=cms.string("regressed_energy"), type=cms.string("float"), doc=cms.string("Regressed energy"), precision=cms.int32(-1)),
+            barycenter_x=cms.PSet(expr=cms.string("barycenter.x"), type=cms.string("float"), doc=cms.string("Barycenter x [cm]"), precision=cms.int32(-1)),
+            barycenter_y=cms.PSet(expr=cms.string("barycenter.y"), type=cms.string("float"), doc=cms.string("Barycenter y [cm]"), precision=cms.int32(-1)),
+            barycenter_z=cms.PSet(expr=cms.string("barycenter.z"), type=cms.string("float"), doc=cms.string("Barycenter z [cm]"), precision=cms.int32(-1)),
+            barycenter_eta=cms.PSet(expr=cms.string("barycenter.eta"), type=cms.string("float"), doc=cms.string("Barycenter eta"), precision=cms.int32(-1)),
+            barycenter_phi=cms.PSet(expr=cms.string("barycenter.phi"), type=cms.string("float"), doc=cms.string("Barycenter phi"), precision=cms.int32(-1)),
+            time=cms.PSet(expr=cms.string("time"), type=cms.string("float"), doc=cms.string("HGCAL time"), precision=cms.int32(-1)),
+            timeError=cms.PSet(expr=cms.string("timeError"), type=cms.string("float"), doc=cms.string("HGCAL time error"), precision=cms.int32(-1)),
+        ),
+        collectionVariables=cms.PSet(
+            tracksterVertices=cms.PSet(
+                name=cms.string(_iterLabel + "vertices"),
+                doc=cms.string("Trackster<->LayerCluster association (vertex = LC index)"),
+                useCount=cms.bool(True),
+                useOffset=cms.bool(True),
+                variables=cms.PSet(
+                    vertices=cms.PSet(expr=cms.string("vertices"), type=cms.string("uint"), doc=cms.string("LayerCluster index"), precision=cms.int32(-1)),
+                    vertex_mult=cms.PSet(expr=cms.string("vertex_multiplicity"), type=cms.string("float"), doc=cms.string("Fraction of LC energy used by trackster"), precision=cms.int32(-1)),
+                ),
+            ),
+        ),
+    )
+    _attrName = _iterLabel + "Table"
+    setattr(process, _attrName, _prod)
+    _tracksterTableProducers.append(getattr(process, _attrName))
+
+# All TICL nano producers get scheduled as a single Task attached to nanoAOD_step
+process.ticlTablesTask = cms.Task(
+    process.ticlCandidateTable,
+    process.ticlCandidateExtraTable,
+    *_tracksterTableProducers,
+)
+
 # Path and EndPath definitions
-process.nanoAOD_step = cms.Path(process.nanoHGCMLSequence)
+process.nanoAOD_step = cms.Path(process.nanoHGCMLSequence, process.ticlTablesTask)
+
 process.endjob_step = cms.EndPath(process.endOfProcess)
 process.NANOAODSIMoutput_step = cms.EndPath(process.NANOAODSIMoutput)
 
