@@ -90,3 +90,104 @@ Options:
 
 The chain from RecHits to TICLCandidates is available via three index
 associations in the flat tree, plus per-object kinematic tables.
+
+### Batch submission — condor (LPC) and SLURM (falcon)
+
+For large parallel campaigns (many replicas at a fixed energy) use the
+scripts under [`condor/`](condor/). Each replica is an independent chain
+`GSD → RECO → nanoML` with a unique seed
+(`seed = round(energy * 1000) + replica_index`).
+
+#### LPC — HTCondor + DAGMan
+
+```shell
+# One-time setup (in a shell where cmsenv has NOT been sourced;
+# cmsenv leaks PYTHONHOME/PYTHONPATH/LD_LIBRARY_PATH which breaks
+# condor_submit_dag):
+cd $CMSSW_BASE/src/production_tests/condor
+voms-proxy-init -voms cms -valid 192:00
+
+# Smoke test: 1 replica, 2 events at 10 GeV; defaults to
+# /store/user/$USER/production_tests/pre1_D121
+bash submit_dag.sh --energy 10 --nreplicas 1 --nevents 2
+
+# Full campaign: 10 replicas at 100 GeV, 200 events each
+bash submit_dag.sh --energy 100 --nreplicas 10 --nevents 200
+
+# Override output location (EOS path or shared FS)
+bash submit_dag.sh --energy 100 --nreplicas 10 --nevents 200 \
+    --outdir /store/user/${USER}/mycampaign
+
+# Different particle
+bash submit_dag.sh --energy 100 --nreplicas 10 --nevents 200 \
+    --particle 11 --partname electron
+```
+
+Options:
+
+| Flag                | Default                                                   |
+|---------------------|-----------------------------------------------------------|
+| `--energy`          | *required* (GeV)                                          |
+| `--nreplicas`       | *required*                                                |
+| `--nevents`         | *required*, events per job                                |
+| `--particle`        | `22` (photon pdgId)                                       |
+| `--partname`        | `photon` (used for file naming)                           |
+| `--outdir`          | `/store/user/$USER/production_tests/pre1_D121`            |
+| `--schedd`          | (unset) — pass e.g. `lpcschedd4.fnal.gov` to pin a schedd |
+| `--rebuild-tarball` | force rebuild the CMSSW tarball                           |
+
+Outputs land at
+`root://cmseos.fnal.gov/${outdir}/{GSD,RECO,nanoML}/${partname}_E${energy}_rep${N}_*.root`
+(or under the local path if `--outdir` is a plain filesystem path).
+
+Monitor / retry:
+
+```shell
+condor_q -dag $USER
+tail -f pipeline_${partname}_E${energy}.dag.dagman.out
+
+# Retry from where it left off (uses rescue file)
+condor_submit_dag -f pipeline_${partname}_E${energy}.dag
+
+# Full reset (empty the queue first)
+condor_rm $USER
+rm -f pipeline_*.dag.* pipeline_*.rescue*
+```
+
+#### Falcon — SLURM job array
+
+Falcon has no DAGMan, so the SLURM version runs all 3 stages
+sequentially inside one job per array task. Parallelism comes from
+`--array=0-N`, one array task per replica.
+
+```shell
+cd $CMSSW_BASE/src/production_tests/condor
+mkdir -p logs
+
+sbatch --array=0-9 submit_pipeline.slurm \
+    --energy 100 --nevents 200 \
+    --outdir /home/export/$USER/production_tests/pre1_D121
+```
+
+Same `--particle`/`--partname` flags as the LPC version. If your
+CMSSW is not at `$HOME/CMSSW_20_0_0_pre1`, pass
+`--cmssw-base /path/to/CMSSW_20_0_0_pre1`.
+
+### root → parquet conversion
+
+[`root_to_parquet.py`](root_to_parquet.py) flattens nanoML ROOT files
+into a single parquet file for ML training. Collections are grouped
+by object family (`RecHitHGC`, `LayerCluster`, `SimCluster`,
+`MergedSimCluster`, `TICLCand`, `Candidate2Tracksters`, and each
+trackster iteration).
+
+Two derived boolean fields are added:
+`SimCluster_isPileup` and `MergedSimCluster_isPileup`, computed as
+`~((bunchCrossing == 0) & (eventId == 0))`.
+
+```shell
+python3 root_to_parquet.py \
+    --nanoMLfiles /path/to/nanoML1.root /path/to/nanoML2.root \
+    --outputDir parquet_out \
+    --outputFile mydata.parquet
+```
