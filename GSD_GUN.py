@@ -20,6 +20,10 @@ options.register("nParticles", 1, VarParsing.multiplicity.singleton, VarParsing.
     "number of particles in gun")
 options.register("useFineCalo", 0, VarParsing.multiplicity.singleton, VarParsing.varType.int,
     "use fine calorimeter segmentation (1=True, 0=False)")
+options.register("particle", 22, VarParsing.multiplicity.singleton, VarParsing.varType.int,
+    "pdgId of the particle to shoot (22=photon, 11=electron, 211=pi+, 130=K0L, 15=tau, ...)")
+options.register("energy", 100.0, VarParsing.multiplicity.singleton, VarParsing.varType.float,
+    "gun energy in GeV (fixed; MinE=MaxE=energy)")
 options.parseArguments()
 
 # Import process based on useFineCalo flag
@@ -54,17 +58,17 @@ def calculate_rho(z, eta):
 
 process.generator = cms.EDProducer("edm::FlatEtaRangeGunProducer",
     PGunParameters = cms.PSet(
-    # particle ids
-    PartID=cms.vint32(15), #(22, 22, 11,-11,211,-211,13,-13, 310, 130, 111, 311, 321, -321),
+    # particle ids (single, configurable via --particle)
+    PartID=cms.vint32(int(options.particle)),
     # max number of particles to shoot at a time
     nParticles=cms.int32(options.nParticles),
     # shoot exactly the particles defined in particleIDs in that order
     exactShoot=cms.bool(False),
     # randomly shoot [1, nParticles] particles, each time randomly drawn from particleIDs
     randomShoot=cms.bool(False),
-    # energy range
-    MinE=cms.double(200.0),
-    MaxE=cms.double(200.0),
+    # energy range (fixed; MinE=MaxE=options.energy)
+    MinE=cms.double(float(options.energy)),
+    MaxE=cms.double(float(options.energy)),
     # phi range
     MinPhi=cms.double(-math.pi),
     MaxPhi=cms.double(math.pi),

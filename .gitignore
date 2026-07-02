@@ -1,0 +1,9 @@
+# Test outputs
+test*.root
+Phase2Timing_resources.json
+
+# Parquet processing outputs
+parquet_out/
+
+# Generated
+__pycache__/

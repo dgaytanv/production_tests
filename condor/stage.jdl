@@ -1,0 +1,22 @@
+universe                = vanilla
+executable              = run_stage.sh
+arguments               = $(stage) $(particle) $(energy) $(seed) $(replica) $(nevents) $(outdir) $(partname)
+
+transfer_input_files    = CMSSW_20_0_0_pre1.tar.gz
+should_transfer_files   = YES
+when_to_transfer_output = ON_EXIT
+
+output                  = logs/$(jobname).out
+error                   = logs/$(jobname).err
+log                     = logs/$(jobname).log
+
+request_cpus            = 1
+request_memory          = 4000
+request_disk            = 20000000
++MaxRuntime             = 86400
++DesiredOS              = "rhel9"
++REQUIRED_OS            = "rhel9"
+
+x509userproxy           = $ENV(X509_USER_PROXY)
+
+queue
