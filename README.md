@@ -50,8 +50,37 @@ Options:
 - `seed=N` — random seed and first lumiBlock (required for unique output)
 - `nParticles=N` — particles per event
 - `useFineCalo={0,1}` — fineCalo on/off
-- `pileup=N` — average PU (0 = no PU, uses `mixNoPU_cfi`)
+- `pileup=N` — average PU (0 = no PU). Requires `pu=<file>` when > 0
+  (see "MINBIAS" section below).
+- `pu=<file>` — minbias GEN-SIM file to mix as pileup. Path can be
+  plain (`smoke.root`), `file:` URL, or `root://` URL.
 - `maxEvents=N`, `nThreads=N`
+
+### 1a. Optional — MINBIAS (only when running with pileup)
+
+For pileup mixing, generate a minbias GEN-SIM library first, then feed
+it into `GSD_GUN.py` via the `pu=` option:
+
+```shell
+# Step 1: minbias library. nEvents should be >= average PU for good
+# statistics. Use a distinct seed from your signal run.
+cmsRun MINBIAS_GENSIM.py seed=42 maxEvents=200 outputFile=pileup_gensim.root
+
+# Step 2: GSD with PU mixing. pileup=N sets the average, pu=<file>
+# points to the minbias library from step 1.
+cmsRun GSD_GUN.py seed=1 particle=22 energy=100 pileup=30 \
+    pu=pileup_gensim.root outputFile=testGSD.root
+```
+
+`MINBIAS_GENSIM.py` runs Pythia8 SoftQCD (non-diffractive + single +
+double diffractive) at 14 TeV with the CP5 tune. When `pileup > 0`,
+`GSD_GUN.py` routes through `GSD_fragment_PU` (a cmsDriver-generated
+fragment with `--pileup AVE_30_BX_25ns` baked in) instead of the
+no-PU `GSD_fragment`.
+
+The batch-submission scripts under `condor/` handle this automatically
+via the `--pileup` and `--nminbias` flags — see the batch submission
+section below.
 
 ### 2. RECO (Reconstruction)
 
