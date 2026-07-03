@@ -96,7 +96,10 @@ associations in the flat tree, plus per-object kinematic tables.
 For large parallel campaigns (many replicas at a fixed energy) use the
 scripts under [`condor/`](condor/). Each replica is an independent chain
 `GSD → RECO → nanoML` with a unique seed
-(`seed = round(energy * 1000) + replica_index`).
+(`seed = round(energy * 1000) + replica_index`). When `--pileup > 0` a
+prerequisite `MINBIAS` stage is added: each replica independently
+generates its own minbias GEN-SIM library (with an offset seed of
+`signal_seed + 500000`) that gets mixed into the GSD step.
 
 #### LPC — HTCondor + DAGMan
 
@@ -133,12 +136,16 @@ Options:
 | `--particle`        | `22` (photon pdgId)                                       |
 | `--partname`        | `photon` (used for file naming)                           |
 | `--outdir`          | `/store/user/$USER/production_tests/pre1_D121`            |
+| `--pileup`          | `0` (no PU). Set > 0 to enable minbias mixing.            |
+| `--nminbias`        | equal to `--nevents`. Minbias events per replica.         |
 | `--schedd`          | (unset) — pass e.g. `lpcschedd4.fnal.gov` to pin a schedd |
 | `--rebuild-tarball` | force rebuild the CMSSW tarball                           |
 
 Outputs land at
 `root://cmseos.fnal.gov/${outdir}/{GSD,RECO,nanoML}/${partname}_E${energy}_rep${N}_*.root`
-(or under the local path if `--outdir` is a plain filesystem path).
+(or under the local path if `--outdir` is a plain filesystem path). When
+`--pileup > 0`, an additional `MINBIAS/` subdirectory is populated with
+the minbias GEN-SIM libraries used for the mix.
 
 Monitor / retry:
 
@@ -168,6 +175,11 @@ sbatch --array=0-9 submit_pipeline.slurm \
     --energy 100 --nevents 200 \
     --outdir /home/export/$USER/production_tests/pre1_D121
 ```
+
+Note: the SLURM version does not currently support `--pileup`. PU
+support in SLURM will require the same MINBIAS + PU-aware GSD wiring
+as the condor version; not yet implemented. Run with `--pileup > 0`
+on LPC only for now.
 
 Same `--particle`/`--partname` flags as the LPC version. If your
 CMSSW is not at `$HOME/CMSSW_20_0_0_pre1`, pass
