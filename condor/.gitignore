@@ -1,9 +1,10 @@
-# Test outputs
-test*.root
+CMSSW_*.tar.gz
+*.dag
+*.dag.*
+*.rescue*
+*.lock
+logs/
+outputs/
+*.root
 Phase2Timing_resources.json
-
-# Parquet processing outputs
-parquet_out/
-
-# Generated
 __pycache__/

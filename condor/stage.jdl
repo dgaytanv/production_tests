@@ -1,6 +1,6 @@
 universe                = vanilla
 executable              = run_stage.sh
-arguments               = $(stage) $(particle) $(energy) $(seed) $(replica) $(nevents) $(outdir) $(partname)
+arguments               = $(stage) $(particle) $(energy) $(seed) $(replica) $(nevents) $(outdir) $(partname) $(pileup) $(nminbias)
 
 transfer_input_files    = CMSSW_20_0_0_pre1.tar.gz
 should_transfer_files   = YES

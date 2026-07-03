@@ -1,13 +1,22 @@
 #!/bin/bash
-# Args: STAGE PARTICLE ENERGY SEED REPLICA NEVENTS OUTDIR PARTNAME
+# Args: STAGE PARTICLE ENERGY SEED REPLICA NEVENTS OUTDIR PARTNAME [PILEUP] [NMINBIAS]
+#   STAGE      minbias | gsd | reco | nano
+#   PILEUP     average PU (0 = no PU, ignored for reco/nano)
+#   NMINBIAS   nEvents for the minbias GENSIM stage (only used by minbias stage)
 set -eu -o pipefail
 
 STAGE="${1:?}"; PARTICLE="${2:?}"; ENERGY="${3:?}"; SEED="${4:?}"
 REPLICA="${5:?}"; NEVENTS="${6:?}"; OUTDIR="${7:?}"; PARTNAME="${8:?}"
+PILEUP="${9:-0}"
+NMINBIAS="${10:-$NEVENTS}"
 
 ETAG=$(printf "%.0f" "$ENERGY")
 TAG="${PARTNAME}_E${ETAG}_rep${REPLICA}"
-echo "=== $(hostname) $(date -u +%FT%TZ) STAGE=$STAGE TAG=$TAG OUTDIR=$OUTDIR ==="
+# Minbias uses a different seed offset to avoid colliding with the signal seed.
+MINBIAS_SEED=$((SEED + 500000))
+MINBIAS_TAG="minbias_E${ETAG}_rep${REPLICA}"
+
+echo "=== $(hostname) $(date -u +%FT%TZ) STAGE=$STAGE TAG=$TAG PILEUP=$PILEUP OUTDIR=$OUTDIR ==="
 
 source /cvmfs/cms.cern.ch/cmsset_default.sh
 tar -xzf CMSSW_*.tar.gz
@@ -41,10 +50,36 @@ stage_out() {
 }
 
 case "$STAGE" in
+    minbias)
+        # Independent minbias GENSIM run. Uses a distinct seed so different
+        # replicas get statistically independent minbias libraries.
+        OUT="${MINBIAS_TAG}_GENSIM.root"
+        cmsRun "${CFG_DIR}/MINBIAS_GENSIM.py" \
+            seed="$MINBIAS_SEED" \
+            maxEvents="$NMINBIAS" \
+            outputFile="$OUT"
+        DEST="${OUTDIR}/MINBIAS"
+        ;;
     gsd)
         OUT="${TAG}_GSD.root"
-        cmsRun "${CFG_DIR}/GSD_GUN.py" seed="$SEED" particle="$PARTICLE" energy="$ENERGY" maxEvents="$NEVENTS" outputFile="$OUT"
-        DEST="${OUTDIR}/GSD" ;;
+        if [ "$PILEUP" -gt 0 ]; then
+            # Fetch this replica's minbias GENSIM and pass as pu=
+            MINBIAS_IN="${MINBIAS_TAG}_GENSIM.root"
+            fetch "${OUTDIR}/MINBIAS/${MINBIAS_IN}"
+            cmsRun "${CFG_DIR}/GSD_GUN.py" \
+                seed="$SEED" particle="$PARTICLE" energy="$ENERGY" \
+                maxEvents="$NEVENTS" \
+                pileup="$PILEUP" pu="$MINBIAS_IN" \
+                outputFile="$OUT"
+            rm -f "$MINBIAS_IN"
+        else
+            cmsRun "${CFG_DIR}/GSD_GUN.py" \
+                seed="$SEED" particle="$PARTICLE" energy="$ENERGY" \
+                maxEvents="$NEVENTS" \
+                outputFile="$OUT"
+        fi
+        DEST="${OUTDIR}/GSD"
+        ;;
     reco)
         IN="${TAG}_GSD.root"; OUT="${TAG}_RECO.root"
         fetch "${OUTDIR}/GSD/${IN}"

@@ -1,5 +1,6 @@
 # Test outputs
 test*.root
+smoke*.root
 Phase2Timing_resources.json
 
 # Parquet processing outputs
