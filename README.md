@@ -30,7 +30,7 @@ git clone git@github.com:dgaytanv/production_tests.git
 cd production_tests
 ```
 
-Before running the GSD step, you should edit the [GSD_GUN.py](GSD_GUN.py) file to select the number of particles, IDs, and energy range you would like to generate. To activate or deactivate fineCalo, use the useFineCalo flag (by default useFineCalo=1). Then to run the GSD step you do (replace the X with an actual numeric seed)
+Before running the GSD step, you should edit the [GSD_GUN.py](GSD_GUN.py) file to select the number of particles, IDs, and energy range you would like to generate. To activate or deactivate fineCalo, use the useFineCalo flag (by default useFineCalo=0). Then to run the GSD step you do (replace the X with an actual numeric seed)
 
 ```cmsRun GSD_GUN.py seed=X outputFile=testGSD.root```
 
