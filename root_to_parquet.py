@@ -140,16 +140,25 @@ def process_batch(ml_files):
         with uproot.open(f)["Events"] as tree:
             for group_name, branches in BRANCH_GROUPS.items():
                 data = tree.arrays(filter_name=branches, library="ak")
+                # if len(data.fields) == 0:
+                #     continue
 
                 # Derive isPileup flag for SimCluster and MergedSimCluster:
                 # signal iff bunchCrossing == 0 AND eventId == 0; anything
                 # else is pileup (either OOT via BX != 0 or in-time PU
                 # minbias via eventId != 0).
+
                 if group_name in ("SimCluster", "MergedSimCluster"):
                     bx_branch = f"{group_name}_bunchCrossing"
                     ev_branch = f"{group_name}_eventId"
                     is_pileup = ~((data[bx_branch] == 0) & (data[ev_branch] == 0))
                     data[f"{group_name}_isPileup"] = is_pileup
+
+                # if group_name == "SimCluster":
+                #     bx_branch = "SimCluster_bunchCrossing"
+                #     ev_branch = "SimCluster_eventId"
+                #     is_pileup = ~((data[bx_branch] == 0) & (data[ev_branch] == 0))
+                #     data["SimCluster_isPileup"] = is_pileup
 
                 tmp_store[group_name].append(data)
 
