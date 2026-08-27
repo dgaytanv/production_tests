@@ -212,7 +212,7 @@ def _remap(idx, index_map):
     safe = ak.where(idx >= 0, idx, counts)
     return padded[safe]
 
-
+# this is the original split match from daniel
 # def _split_matches(idx, qual, nmatch, row_counts, keep_rows, target_map):
 #     """Handle a (MatchIdx, MatchQual, NumMatch) triplet during the split.
 
@@ -248,51 +248,38 @@ def _remap(idx, index_map):
 #     out_n = ak.num(nested_idx, axis=2)
 #     return out_idx, out_qual, out_n
 
+
+
+# this works for tau from 20 to 200 and photons at 100
 def _split_matches(idx, qual, nmatch, row_counts, keep_rows, target_map):
+    
     remapped = _remap(idx, target_map) if target_map is not None else idx
 
-    # Layout 1: one entry per source row
+    # Case 1: one match per source row
     if ak.all(ak.num(idx) == row_counts):
-        idx_events = ak.to_list(remapped)
-        keep_events = ak.to_list(keep_rows)
-        nmatch_events = ak.to_list(nmatch)
-        qual_events = ak.to_list(qual) if qual is not None else None
+        out_idx = remapped[keep_rows]
+        out_qual = qual[keep_rows] if qual is not None else None
+        out_n = nmatch[keep_rows]
+        return out_idx, out_qual, out_n
 
-        out_idx = []
-        out_qual = [] if qual_events is not None else None
-        out_n = []
-
-        for ev_i, ev_keep, ev_n in zip(idx_events, keep_events, nmatch_events):
-            out_idx.append([value for value, keep in zip(ev_i, ev_keep) if keep])
-            out_n.append([value for value, keep in zip(ev_n, ev_keep) if keep])
-
-        if qual_events is not None:
-            for ev_q, ev_keep in zip(qual_events, keep_events):
-                out_qual.append([value for value, keep in zip(ev_q, ev_keep) if keep])
-
-        return (
-            ak.Array(out_idx),
-            ak.Array(out_qual) if out_qual is not None else None,
-            ak.Array(out_n),
-        )
-
-    # Layout 2: flattened multi-match list plus per-row counts
-    idx_events = ak.to_list(remapped)
-    keep_events = ak.to_list(keep_rows)
-    nmatch_events = ak.to_list(nmatch)
-    qual_events = ak.to_list(qual) if qual is not None else None
+    # Case 2: multi-match layout. Do not index regrouped match arrays with
+    # a mask built for the original rows.
+    idx_list = ak.to_list(remapped)
+    keep_list = ak.to_list(keep_rows)
+    nmatch_list = ak.to_list(nmatch)
+    qual_list = ak.to_list(qual) if qual is not None else None
 
     out_idx = []
-    out_qual = [] if qual_events is not None else None
     out_n = []
+    out_qual = [] if qual is not None else None
 
-    for iev, (ev_idx, ev_keep, ev_nmatch) in enumerate(zip(idx_events, keep_events, nmatch_events)):
+    for iev, (ev_idx, ev_keep, ev_nmatch) in enumerate(zip(idx_list, keep_list, nmatch_list)):
+        pos = 0
         ev_out_idx = []
         ev_out_n = []
-        ev_out_qual = [] if qual_events is not None else None
+        ev_out_qual = [] if qual is not None else None
 
-        ev_qual = qual_events[iev] if qual_events is not None else None
-        pos = 0
+        ev_qual = qual_list[iev] if qual_list is not None else None
 
         for keep, count in zip(ev_keep, ev_nmatch):
             chunk_idx = ev_idx[pos:pos + count]
@@ -303,15 +290,14 @@ def _split_matches(idx, qual, nmatch, row_counts, keep_rows, target_map):
                 continue
 
             if target_map is not None:
-                good = [value >= 0 for value in chunk_idx]
-                chunk_idx = [value for value, is_good in zip(chunk_idx, good) if is_good]
+                good = [v >= 0 for v in chunk_idx]
+                chunk_idx = [v for v, ok in zip(chunk_idx, good) if ok]
                 if chunk_qual is not None:
-                    chunk_qual = [value for value, is_good in zip(chunk_qual, good) if is_good]
+                    chunk_qual = [v for v, ok in zip(chunk_qual, good) if ok]
 
             ev_out_idx.extend(chunk_idx)
             ev_out_n.append(len(chunk_idx))
-
-            if ev_out_qual is not None:
+            if chunk_qual is not None:
                 ev_out_qual.extend(chunk_qual)
 
         out_idx.append(ev_out_idx)
@@ -324,7 +310,6 @@ def _split_matches(idx, qual, nmatch, row_counts, keep_rows, target_map):
         ak.Array(out_qual) if out_qual is not None else None,
         ak.Array(out_n),
     )
-
 
 # ---------------------------------------------------------------------------
 # Per-group split processors
@@ -412,10 +397,49 @@ def _split_ticlcands(d, k, flip):
     return out
 
 
+# def _split_candidates(d, keep_cand, t_map):
+#     """Split the TICLCand -> trackster link table. Rows are parallel to
+#     TICLCand, so the TICLCand endcap mask is reused; trackster indices are
+#     remapped into the split CAND_TRACKSTER_COLLECTION."""
+#     idx_flat = d['Candidate2TrackstersIndices_tracksterIndex']
+#     remapped = _remap(idx_flat, t_map)
+
+#     cnt_b = 'Candidate2Tracksters_nCandidate2TrackstersIndices'
+#     off_b = 'Candidate2Tracksters_oCandidate2TrackstersIndices'
+#     have_counts = cnt_b in d.fields
+
+#     if have_counts:
+#         nested = ak.unflatten(remapped, ak.flatten(d[cnt_b]), axis=1)
+#     else:
+#         # Fallback: assume exactly one linked trackster per candidate.
+#         if not ak.all(ak.num(idx_flat) == ak.num(keep_cand)):
+#             raise RuntimeError(
+#                 "Candidate2Tracksters: per-candidate count branch "
+#                 f"'{cnt_b}' not found and the flat index table is not 1-to-1 "
+#                 "with TICLCand, so links cannot be regrouped per candidate. "
+#                 "Check tree.keys() for the actual count/offset branch names "
+#                 "and add them to BRANCH_GROUPS['Candidate2Tracksters'].")
+#         nested = ak.unflatten(remapped, 1, axis=1)
+
+#     nested = nested[keep_cand]
+#     # drop links into the removed endcap (a kept candidate's tracksters
+#     # should all be on its own side; this is a safety net)
+#     good = nested >= 0
+#     nested = nested[good]
+
+#     out = {}
+#     out['nCandidate2Tracksters'] = ak.num(nested)
+#     out['Candidate2TrackstersIndices_tracksterIndex'] = ak.flatten(nested, axis=2)
+#     out['nCandidate2TrackstersIndices'] = ak.num(
+#         out['Candidate2TrackstersIndices_tracksterIndex'])
+#     if have_counts:
+#         new_counts = ak.num(nested, axis=2)
+#         out[cnt_b] = new_counts
+#         if off_b in d.fields:
+#             out[off_b] = _exclusive_prefix_sum(new_counts)
+#     return out
+
 def _split_candidates(d, keep_cand, t_map):
-    """Split the TICLCand -> trackster link table. Rows are parallel to
-    TICLCand, so the TICLCand endcap mask is reused; trackster indices are
-    remapped into the split CAND_TRACKSTER_COLLECTION."""
     idx_flat = d['Candidate2TrackstersIndices_tracksterIndex']
     remapped = _remap(idx_flat, t_map)
 
@@ -424,21 +448,25 @@ def _split_candidates(d, keep_cand, t_map):
     have_counts = cnt_b in d.fields
 
     if have_counts:
-        nested = ak.unflatten(remapped, ak.flatten(d[cnt_b]), axis=1)
+        flat_counts = ak.flatten(d[cnt_b])
+        nested = ak.unflatten(remapped, flat_counts, axis=1)
     else:
-        # Fallback: assume exactly one linked trackster per candidate.
         if not ak.all(ak.num(idx_flat) == ak.num(keep_cand)):
             raise RuntimeError(
                 "Candidate2Tracksters: per-candidate count branch "
                 f"'{cnt_b}' not found and the flat index table is not 1-to-1 "
-                "with TICLCand, so links cannot be regrouped per candidate. "
-                "Check tree.keys() for the actual count/offset branch names "
-                "and add them to BRANCH_GROUPS['Candidate2Tracksters'].")
+                "with TICLCand, so links cannot be regrouped per candidate."
+            )
         nested = ak.unflatten(remapped, 1, axis=1)
 
-    nested = nested[keep_cand]
-    # drop links into the removed endcap (a kept candidate's tracksters
-    # should all be on its own side; this is a safety net)
+    # Correct event-by-event filtering at candidate level
+    filtered = [
+        [cand for cand, keep in zip(ev_cands, ev_keep) if keep]
+        for ev_cands, ev_keep in zip(ak.to_list(nested), ak.to_list(keep_cand))
+    ]
+    nested = ak.Array(filtered)
+
+    # Drop links into removed endcap
     good = nested >= 0
     nested = nested[good]
 
@@ -446,12 +474,15 @@ def _split_candidates(d, keep_cand, t_map):
     out['nCandidate2Tracksters'] = ak.num(nested)
     out['Candidate2TrackstersIndices_tracksterIndex'] = ak.flatten(nested, axis=2)
     out['nCandidate2TrackstersIndices'] = ak.num(
-        out['Candidate2TrackstersIndices_tracksterIndex'])
+        out['Candidate2TrackstersIndices_tracksterIndex']
+    )
+
     if have_counts:
         new_counts = ak.num(nested, axis=2)
         out[cnt_b] = new_counts
         if off_b in d.fields:
             out[off_b] = _exclusive_prefix_sum(new_counts)
+
     return out
 
 
@@ -558,6 +589,27 @@ def process_batch(ml_files):
     # Split each event into two: +z endcap as-is, -z endcap mirrored to +z
     pos = build_endcap(batch, +1)
     neg = build_endcap(batch, -1)
+
+    # Keep only non-empty split events.
+    # Use the collections that matter downstream; these are the most relevant ones here.
+    pos_keep = (
+        ak.num(pos["LayerCluster"]["LayerCluster_z"], axis=1) > 0
+    ) & (
+        ak.num(pos["MergedSimCluster"]["MergedSimCluster_impactPoint_z"], axis=1) > 0
+    ) & (
+        ak.num(pos["SimCluster"]["SimCluster_impactPoint_z"], axis=1) > 0
+    )
+
+    neg_keep = (
+        ak.num(neg["LayerCluster"]["LayerCluster_z"], axis=1) > 0
+    ) & (
+        ak.num(neg["MergedSimCluster"]["MergedSimCluster_impactPoint_z"], axis=1) > 0
+    ) & (
+        ak.num(neg["SimCluster"]["SimCluster_impactPoint_z"], axis=1) > 0
+    )
+
+    pos = pos[pos_keep]
+    neg = neg[neg_keep]
 
     both = ak.concatenate([pos, neg])
     n = len(pos)
