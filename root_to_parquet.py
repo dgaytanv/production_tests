@@ -1,25 +1,3 @@
-import uproot
-import numpy as np
-import awkward as ak
-from glob import glob
-from tqdm import tqdm
-from collections import defaultdict
-import os, pathlib
-import argparse
-import gc
-import pyarrow.parquet as pq
-import pyarrow as pa
-
-
-def parse_args():
-    parser = argparse.ArgumentParser(
-        description='Process nanoML root files (with TICL tables inline) into a single parquet file. '
-                    'For CMSSW_20_0_0_pre1: TICL is now default reco, tracksters and TICLCandidates '
-                    'live in the same Events tree as SimClusters/RecHits (no separate output_ticl.root).'
-    )
-    parser.add_argument('--nanoMLfiles', nargs='+', required=True, help='List of nanoML root files')
-    parser.add_argument('--outputDir', type=str, default="parquet_out", help='Output directory for parquet files')
-    parser.add_argument('--outputFile', type=str, default="output.parquet", help='Output parquet filename')
     parser.add_argument('--compression', type=str, default='lz4', help='Parquet compression algorithm')
     parser.add_argument('--batch_size', type=int, default=2, help='Number of files to process at once')
 
