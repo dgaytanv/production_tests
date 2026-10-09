@@ -8,3 +8,4 @@ outputs/
 *.root
 Phase2Timing_resources.json
 __pycache__/
+pipeline_*.jdl

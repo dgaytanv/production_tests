@@ -1,99 +1,250 @@
 #!/bin/bash
-# Args: STAGE PARTICLE ENERGY SEED REPLICA NEVENTS OUTDIR PARTNAME [PILEUP] [NMINBIAS]
-#   STAGE      minbias | gsd | reco | nano
-#   PILEUP     average PU (0 = no PU, ignored for reco/nano)
-#   NMINBIAS   nEvents for the minbias GENSIM stage (only used by minbias stage)
+# run_stage.sh — one node of the pre1_D121 production DAG (see build_dag.sh).
+#
+# All arguments are key=value pairs, in any order:
+#
+#   stage=STAGE      minbias | gsd | reco | nano | chain
+#                    chain = [minbias ->] gsd -> reco -> nano inside ONE job; the
+#                    intermediate files stay in the job sandbox (see keep=)
+#   particle=PDGID   22 (photon), 15 (tau), ...
+#   partname=NAME    used in file names (photon, taus, ...)
+#   minE=X maxE=X    gun energy range in GeV, flat (minE=maxE for a fixed energy)
+#   energy=X         shorthand for minE=maxE=X
+#   seed=N           GSD random seed (also the first luminosity block)
+#   replica=N        replica index -> file-name suffix rep<N>; a non-numeric
+#                    value (e.g. "canary") is used verbatim
+#   nevents=N        signal events to generate
+#   outdir=PATH      output base: /store/user/... (FNAL EOS), /eos/... (CERN EOS,
+#                    staged out with xrdcp) or a plain shared-filesystem path
+#   pileup=N         average PU (0 = none)
+#   nminbias=N       minbias events to generate for the PU library (default nevents)
+#   finecalo=0|1     useFineCalo for GSD_GUN.py (default 0)
+#   nthreads=N       threads for every cmsRun step (default 1)
+#   keep=LIST        chain only: comma-separated subset of minbias,gsd,reco,nano
+#                    to stage out (default nano)
+#   cmssw=PATH       CMSSW release area to use directly when it is visible from
+#                    the worker node (e.g. on AFS at CERN). When unset or not
+#                    visible, a CMSSW_*.tar.gz from the job sandbox is unpacked
+#                    instead (LPC mode).
+#   prodtests=PATH   directory holding the cmsRun configs
+#                    (default $CMSSW_BASE/src/production_tests)
+#
+# Outputs land in <outdir>/{MINBIAS,GSD,RECO,nanoML}/ as
+#   <partname>_<stdCalo|fineCalo>[_PU<N>]_E<min>[to<max>]_rep<N>_<STEP>.root
 set -eu -o pipefail
 
-STAGE="${1:?}"; PARTICLE="${2:?}"; ENERGY="${3:?}"; SEED="${4:?}"
-REPLICA="${5:?}"; NEVENTS="${6:?}"; OUTDIR="${7:?}"; PARTNAME="${8:?}"
-PILEUP="${9:-0}"
-NMINBIAS="${10:-$NEVENTS}"
+STAGE=""; PARTICLE=""; PARTNAME=""; MINE=20.0; MAXE=200.0; ENERGY=""
+SEED=""; REPLICA=""; NEVENTS=""; OUTDIR=""; PILEUP=0; NMINBIAS=""
+FINECALO=0; NTHREADS=1; KEEP="nano"; CMSSW=""; PRODTESTS=""
 
-ETAG=$(printf "%.0f" "$ENERGY")
-TAG="${PARTNAME}_E${ETAG}_rep${REPLICA}"
+for kv in "$@"; do
+    key="${kv%%=*}"; val="${kv#*=}"
+    case "$key" in
+        stage)      STAGE="$val" ;;
+        particle)   PARTICLE="$val" ;;
+        partname)   PARTNAME="$val" ;;
+        energy)     ENERGY="$val" ;;
+        minE|mine)  MINE="$val" ;;
+        maxE|maxe)  MAXE="$val" ;;
+        seed)       SEED="$val" ;;
+        replica)    REPLICA="$val" ;;
+        nevents)    NEVENTS="$val" ;;
+        outdir)     OUTDIR="$val" ;;
+        pileup)     PILEUP="$val" ;;
+        nminbias)   NMINBIAS="$val" ;;
+        finecalo)   FINECALO="$val" ;;
+        nthreads)   NTHREADS="$val" ;;
+        keep)       KEEP="$val" ;;
+        cmssw)      CMSSW="$val" ;;
+        prodtests)  PRODTESTS="$val" ;;
+        *) echo "ERROR: unknown argument '$kv'" >&2; exit 1 ;;
+    esac
+done
+
+for var in STAGE PARTICLE PARTNAME SEED REPLICA NEVENTS OUTDIR; do
+    [ -n "${!var}" ] || { echo "ERROR: $(echo "$var" | tr A-Z a-z)= is required" >&2; exit 1; }
+done
+if [ -n "$ENERGY" ]; then MINE="$ENERGY"; MAXE="$ENERGY"; fi
+[ -n "$NMINBIAS" ] || NMINBIAS="$NEVENTS"
+
+# ---- naming (must match build_dag.sh) -----------------------------------
+fmt0() { printf "%.0f" "$1"; }
+if [ "$(fmt0 "$MINE")" = "$(fmt0 "$MAXE")" ]; then
+    ETAG="E$(fmt0 "$MINE")"
+else
+    ETAG="E$(fmt0 "$MINE")to$(fmt0 "$MAXE")"
+fi
+CALO="stdCalo"; [ "$FINECALO" -eq 1 ] && CALO="fineCalo"
+SAMPLE="${PARTNAME}_${CALO}"
+[ "$PILEUP" -gt 0 ] && SAMPLE="${SAMPLE}_PU${PILEUP}"
+SAMPLE="${SAMPLE}_${ETAG}"
+case "$REPLICA" in
+    ''|*[!0-9]*) REPTAG="$REPLICA" ;;
+    *)           REPTAG="rep${REPLICA}" ;;
+esac
+TAG="${SAMPLE}_${REPTAG}"
+MINBIAS_TAG="minbias_${SAMPLE}_${REPTAG}"
 # Minbias uses a different seed offset to avoid colliding with the signal seed.
 MINBIAS_SEED=$((SEED + 500000))
-MINBIAS_TAG="minbias_E${ETAG}_rep${REPLICA}"
 
-echo "=== $(hostname) $(date -u +%FT%TZ) STAGE=$STAGE TAG=$TAG PILEUP=$PILEUP OUTDIR=$OUTDIR ==="
+MINBIAS_OUT="${MINBIAS_TAG}_GENSIM.root"
+GSD_OUT="${TAG}_GSD.root"
+RECO_OUT="${TAG}_RECO.root"
+DQM_OUT="${TAG}_DQM.root"
+NANO_OUT="${TAG}_nanoML.root"
 
+echo "=== $(hostname) $(date -u +%FT%TZ) STAGE=$STAGE TAG=$TAG ==="
+echo "    particle=$PARTICLE  E=[$MINE,$MAXE] GeV  seed=$SEED  nevents=$NEVENTS  pileup=$PILEUP  nminbias=$NMINBIAS"
+echo "    finecalo=$FINECALO  nthreads=$NTHREADS  keep=$KEEP"
+echo "    outdir=$OUTDIR"
+echo "    sandbox=$PWD"
+echo
+
+# ---- CMSSW environment -----------------------------------------------------
 source /cvmfs/cms.cern.ch/cmsset_default.sh
-tar -xzf CMSSW_*.tar.gz
-CMSSW_DIR=$(find . -maxdepth 2 -name "CMSSW_*_pre1" -type d | head -1)
-[ -n "$CMSSW_DIR" ] || { echo "no CMSSW dir"; ls; exit 1; }
-cd "$CMSSW_DIR/src"; scram b ProjectRename 2>&1 | tail -3 || true
-eval $(scramv1 runtime -sh)
-CFG_DIR="$CMSSW_BASE/src/production_tests"
-cd -
+if [ -n "$CMSSW" ] && [ -d "$CMSSW/src" ] && [ -d "$CMSSW/lib" ]; then
+    echo "Using CMSSW area $CMSSW"
+    pushd "$CMSSW/src" >/dev/null
+    eval "$(scramv1 runtime -sh)"
+    popd >/dev/null
+else
+    [ -z "$CMSSW" ] || echo "CMSSW area $CMSSW not visible from $(hostname); unpacking tarball"
+    TARBALL=$(ls CMSSW_*.tar.gz 2>/dev/null | head -1)
+    [ -n "$TARBALL" ] || { echo "ERROR: no CMSSW area and no CMSSW_*.tar.gz in the sandbox" >&2; ls; exit 1; }
+    tar -xzf "$TARBALL"
+    CMSSW_DIR=$(find . -maxdepth 1 -name "CMSSW_*" -type d | head -1)
+    [ -n "$CMSSW_DIR" ] || { echo "ERROR: no CMSSW dir after unpacking $TARBALL" >&2; ls; exit 1; }
+    pushd "$CMSSW_DIR/src" >/dev/null
+    scram b ProjectRename 2>&1 | tail -3 || true
+    eval "$(scramv1 runtime -sh)"
+    popd >/dev/null
+fi
+CFG_DIR="${PRODTESTS:-$CMSSW_BASE/src/production_tests}"
+[ -f "$CFG_DIR/GSD_GUN.py" ] || { echo "ERROR: cmsRun configs not found in $CFG_DIR" >&2; exit 1; }
+echo "CMSSW_BASE=$CMSSW_BASE  SCRAM_ARCH=$SCRAM_ARCH  configs=$CFG_DIR"
+echo
 
-is_remote() { [[ "$1" == /store/* || "$1" == root://* ]]; }
-fetch() {
-    local src="$1" dst="./$(basename "$1")"
-    if is_remote "$src"; then
-        [[ "$src" == /store/* ]] && src="root://cmseos.fnal.gov/$src"
-        xrdcp -f "$src" "$dst"
-    else
-        cp -f "$src" "$dst"
-    fi
+# ---- transfers ---------------------------------------------------------------
+# xrd_url <path> -> xrootd URL for remote output areas, empty for local paths
+xrd_url() {
+    case "$1" in
+        root://*)                 echo "$1" ;;
+        /store/*)                 echo "root://cmseos.fnal.gov/$1" ;;
+        /eos/cms/*)               echo "root://eoscms.cern.ch/$1" ;;
+        /eos/user/*|/eos/home-*)  echo "root://eosuser.cern.ch/$1" ;;
+        /eos/project/*)           echo "root://eosproject.cern.ch/$1" ;;
+        *)                        echo "" ;;
+    esac
 }
+# xrd_retry <xrdcp args...> : up to 3 attempts
+xrd_retry() {
+    local n
+    for n in 1 2 3; do
+        xrdcp -f "$@" && return 0
+        echo "xrdcp attempt $n failed, retrying in 30 s" >&2
+        sleep 30
+    done
+    return 1
+}
+# fetch <remote-or-local file> -> ./<basename>
+fetch() {
+    local src="$1" dst="./$(basename "$1")" url
+    url=$(xrd_url "$src")
+    if [ -n "$url" ]; then xrd_retry "$url" "$dst"; else cp -f "$src" "$dst"; fi
+}
+# stage_out <file> <dest dir>
 stage_out() {
-    local file="$1" dest="$2"
-    if is_remote "$dest"; then
-        local url="$dest"; [[ "$dest" == /store/* ]] && url="root://cmseos.fnal.gov/$dest"
-        eos root://cmseos.fnal.gov mkdir -p "$dest" 2>/dev/null || true
-        xrdcp -f "$file" "$url/$(basename "$file")"
+    local file="$1" dest="$2" url host path
+    url=$(xrd_url "$dest")
+    if [ -n "$url" ]; then
+        host="${url#root://}"; host="${host%%/*}"
+        path=$(echo "${url#root://$host}" | sed 's#^/*#/#')
+        xrdfs "$host" mkdir -p "$path" 2>/dev/null || true
+        xrd_retry "$file" "$url/$(basename "$file")"
     else
         mkdir -p "$dest"
         cp -f "$file" "$dest/$(basename "$file")"
     fi
+    echo "staged out $file -> $dest/"
+}
+check_out() { [ -s "$1" ] || { echo "ERROR: $1 missing or empty" >&2; exit 2; }; }
+keeps() { case ",${KEEP}," in *",$1,"*) return 0 ;; *) return 1 ;; esac; }
+
+TIME=(); [ -x /usr/bin/time ] && TIME=(/usr/bin/time -v)
+
+# ---- steps ---------------------------------------------------------------------
+run_minbias() {
+    echo "--- MINBIAS $(date -u +%FT%TZ): $NMINBIAS events, seed=$MINBIAS_SEED"
+    "${TIME[@]}" cmsRun "$CFG_DIR/MINBIAS_GENSIM.py" \
+        seed="$MINBIAS_SEED" maxEvents="$NMINBIAS" nThreads="$NTHREADS" \
+        outputFile="$MINBIAS_OUT"
+    check_out "$MINBIAS_OUT"
+}
+run_gsd() {
+    echo "--- GSD $(date -u +%FT%TZ): $NEVENTS events, seed=$SEED"
+    local args=(seed="$SEED" particle="$PARTICLE" minE="$MINE" maxE="$MAXE"
+                useFineCalo="$FINECALO" maxEvents="$NEVENTS" nThreads="$NTHREADS"
+                pileup="$PILEUP" outputFile="$GSD_OUT")
+    [ "$PILEUP" -gt 0 ] && args+=(pu="$MINBIAS_OUT")
+    "${TIME[@]}" cmsRun "$CFG_DIR/GSD_GUN.py" "${args[@]}"
+    check_out "$GSD_OUT"
+}
+run_reco() {
+    echo "--- RECO $(date -u +%FT%TZ)"
+    "${TIME[@]}" cmsRun "$CFG_DIR/RECO.py" nThreads="$NTHREADS" \
+        inputFiles="file:${GSD_OUT}" outputFile="$RECO_OUT" outputFileDQM="$DQM_OUT"
+    rm -f "$DQM_OUT"
+    check_out "$RECO_OUT"
+}
+run_nano() {
+    echo "--- nanoML $(date -u +%FT%TZ)"
+    "${TIME[@]}" cmsRun "$CFG_DIR/nanoML_cfg.py" nThreads="$NTHREADS" runPFTruth=0 \
+        inputFiles="file:${RECO_OUT}" outputFile="$NANO_OUT"
+    check_out "$NANO_OUT"
 }
 
 case "$STAGE" in
     minbias)
-        # Independent minbias GENSIM run. Uses a distinct seed so different
-        # replicas get statistically independent minbias libraries.
-        OUT="${MINBIAS_TAG}_GENSIM.root"
-        cmsRun "${CFG_DIR}/MINBIAS_GENSIM.py" \
-            seed="$MINBIAS_SEED" \
-            maxEvents="$NMINBIAS" \
-            outputFile="$OUT"
-        DEST="${OUTDIR}/MINBIAS"
+        run_minbias
+        stage_out "$MINBIAS_OUT" "${OUTDIR}/MINBIAS"
         ;;
     gsd)
-        OUT="${TAG}_GSD.root"
-        if [ "$PILEUP" -gt 0 ]; then
-            # Fetch this replica's minbias GENSIM and pass as pu=
-            MINBIAS_IN="${MINBIAS_TAG}_GENSIM.root"
-            fetch "${OUTDIR}/MINBIAS/${MINBIAS_IN}"
-            cmsRun "${CFG_DIR}/GSD_GUN.py" \
-                seed="$SEED" particle="$PARTICLE" energy="$ENERGY" \
-                maxEvents="$NEVENTS" \
-                pileup="$PILEUP" pu="$MINBIAS_IN" \
-                outputFile="$OUT"
-            rm -f "$MINBIAS_IN"
-        else
-            cmsRun "${CFG_DIR}/GSD_GUN.py" \
-                seed="$SEED" particle="$PARTICLE" energy="$ENERGY" \
-                maxEvents="$NEVENTS" \
-                outputFile="$OUT"
-        fi
-        DEST="${OUTDIR}/GSD"
+        if [ "$PILEUP" -gt 0 ]; then fetch "${OUTDIR}/MINBIAS/${MINBIAS_OUT}"; fi
+        run_gsd
+        rm -f "$MINBIAS_OUT"
+        stage_out "$GSD_OUT" "${OUTDIR}/GSD"
         ;;
     reco)
-        IN="${TAG}_GSD.root"; OUT="${TAG}_RECO.root"
-        fetch "${OUTDIR}/GSD/${IN}"
-        cmsRun "${CFG_DIR}/RECO.py" inputFiles="file:${IN}" outputFile="$OUT"
-        rm -f "$IN"; DEST="${OUTDIR}/RECO" ;;
+        fetch "${OUTDIR}/GSD/${GSD_OUT}"
+        run_reco
+        rm -f "$GSD_OUT"
+        stage_out "$RECO_OUT" "${OUTDIR}/RECO"
+        ;;
     nano)
-        IN="${TAG}_RECO.root"; OUT="${TAG}_nanoML.root"
-        fetch "${OUTDIR}/RECO/${IN}"
-        cmsRun "${CFG_DIR}/nanoML_cfg.py" inputFiles="file:${IN}" outputFile="$OUT"
-        rm -f "$IN"; DEST="${OUTDIR}/nanoML" ;;
-    *) echo "bad STAGE $STAGE"; exit 1 ;;
+        fetch "${OUTDIR}/RECO/${RECO_OUT}"
+        run_nano
+        rm -f "$RECO_OUT"
+        stage_out "$NANO_OUT" "${OUTDIR}/nanoML"
+        ;;
+    chain)
+        if [ "$PILEUP" -gt 0 ]; then
+            run_minbias
+            keeps minbias && stage_out "$MINBIAS_OUT" "${OUTDIR}/MINBIAS"
+        fi
+        run_gsd
+        rm -f "$MINBIAS_OUT"
+        keeps gsd && stage_out "$GSD_OUT" "${OUTDIR}/GSD"
+        run_reco
+        rm -f "$GSD_OUT"
+        keeps reco && stage_out "$RECO_OUT" "${OUTDIR}/RECO"
+        run_nano
+        rm -f "$RECO_OUT"
+        stage_out "$NANO_OUT" "${OUTDIR}/nanoML"
+        ;;
+    *) echo "ERROR: bad stage '$STAGE'" >&2; exit 1 ;;
 esac
 
-[ -s "$OUT" ] || { echo "ERROR: $OUT missing"; exit 2; }
-stage_out "$OUT" "$DEST"
-rm -f "$OUT"
+echo
+echo "sandbox usage before cleanup: $(du -sh . 2>/dev/null | cut -f1)"
+rm -f "$MINBIAS_OUT" "$GSD_OUT" "$RECO_OUT" "$DQM_OUT" "$NANO_OUT"
 echo "=== DONE $(date -u +%FT%TZ) ==="

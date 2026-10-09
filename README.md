@@ -120,70 +120,119 @@ Options:
 The chain from RecHits to TICLCandidates is available via three index
 associations in the flat tree, plus per-object kinematic tables.
 
-### Batch submission — condor (LPC) and SLURM (falcon)
+### Batch submission — HTCondor (CERN lxplus / LPC) and SLURM (falcon)
 
-For large parallel campaigns (many replicas at a fixed energy) use the
-scripts under [`condor/`](condor/). Each replica is an independent chain
-`GSD → RECO → nanoML` with a unique seed
-(`seed = round(energy * 1000) + replica_index`). When `--pileup > 0` a
-prerequisite `MINBIAS` stage is added: each replica independently
-generates its own minbias GEN-SIM library (with an offset seed of
-`signal_seed + 500000`) that gets mixed into the GSD step.
+For large parallel campaigns use the scripts under [`condor/`](condor/).
+Each replica is an independent chain `[MINBIAS →] GSD → RECO → nanoML`
+with a unique seed `seed_base + replica_index`, where `seed_base` is
+`round(energy * 1000)` for a fixed `--energy` and
+`particle * 100000 + round(minE * 1000)` for a flat `--minE`/`--maxE`
+range (override with `--seed-base`). When `--pileup > 0` a prerequisite
+`MINBIAS` stage generates one minbias GEN-SIM library per replica (seed
+offset `+500000`) that gets mixed into the GSD step.
 
-#### LPC — HTCondor + DAGMan
+#### HTCondor + DAGMan (`submit_dag.sh`)
+
+`submit_dag.sh` detects the site from the hostname (`--site cern|lpc`
+overrides it), builds the DAG with `build_dag.sh` — which also renders the
+submit file `pipeline_<sample>.jdl` — runs a few preflight checks
+(credentials, output directories, a 1 MB write probe of `--outdir` and, on
+CERN EOS, free quota vs. the estimated size of the kept outputs) and
+submits. Every DAG node runs `run_stage.sh` with `key=value` arguments.
+
+- **CERN (lxplus)** — the CMSSW area is used in place from AFS (no
+  tarball; pass `--cmssw-base` when this repo is not checked out inside
+  `$CMSSW_BASE/src`), HTCondor forwards the kerberos ticket, outputs are
+  written to `/eos/...` with `xrdcp`. If `condor_submit` fails with
+  "store_cred of Kerberos credential failed - The credmon did not process
+  credentials within the timeout period", the CERN credential monitor is
+  not processing credentials; a fresh `kinit` (renewable ticket) is the
+  first thing to try, otherwise retry later. Default `--mode chain`: one job per
+  replica runs all stages inside its sandbox and stages out only the
+  products listed in `--keep` (default `nano`, i.e. just the nanoML file;
+  the intermediate GSD/RECO files are ~25× larger).
+- **LPC (cmslpc)** — a tarball of the CMSSW area is built once and shipped
+  with every job, a VOMS proxy is required, outputs go to `/store/user/...`
+  on cmseos. Default `--mode stages`: one job per stage and replica, every
+  stage output kept and fetched back by the next stage.
 
 ```shell
-# One-time setup (in a shell where cmsenv has NOT been sourced;
-# cmsenv leaks PYTHONHOME/PYTHONPATH/LD_LIBRARY_PATH which breaks
-# condor_submit_dag):
+# Always from a shell where cmsenv has NOT been sourced (it leaks
+# PYTHONHOME/PYTHONPATH/LD_LIBRARY_PATH, which breaks condor_submit_dag).
+
+# LPC smoke test: 1 replica, 2 events at 10 GeV; defaults to
+# /store/user/$USER/production_tests/pre1_D121
 cd $CMSSW_BASE/src/production_tests/condor
 voms-proxy-init -voms cms -valid 192:00
-
-# Smoke test: 1 replica, 2 events at 10 GeV; defaults to
-# /store/user/$USER/production_tests/pre1_D121
 bash submit_dag.sh --energy 10 --nreplicas 1 --nevents 2
 
-# Full campaign: 10 replicas at 100 GeV, 200 events each
+# LPC full campaign: 10 replicas at 100 GeV, 200 events each
 bash submit_dag.sh --energy 100 --nreplicas 10 --nevents 200
 
-# Override output location (EOS path or shared FS)
-bash submit_dag.sh --energy 100 --nreplicas 10 --nevents 200 \
-    --outdir /store/user/${USER}/mycampaign
+# CERN: 50k taus flat in 20-200 GeV as 100 jobs x 500 events, nanoML only,
+# gated by a 5-event canary job that must succeed before the replicas start
+bash submit_dag.sh --particle 15 --partname taus --minE 20 --maxE 200 \
+    --nreplicas 100 --nevents 500 --canary 5 \
+    --cmssw-base /afs/cern.ch/work/u/user/CMSSW_20_0_0_pre1 \
+    --outdir /eos/user/u/user/taus_50k \
+    --workdir /afs/cern.ch/user/u/user/condor/taus_50k
 
-# Different particle
-bash submit_dag.sh --energy 100 --nreplicas 10 --nevents 200 \
-    --particle 11 --partname electron
+# Build the DAG and run the preflight checks without submitting
+bash submit_dag.sh ... --dry-run
 ```
 
-Options:
+Options (`submit_dag.sh` accepts every `build_dag.sh` option):
 
-| Flag                | Default                                                   |
-|---------------------|-----------------------------------------------------------|
-| `--energy`          | *required* (GeV)                                          |
-| `--nreplicas`       | *required*                                                |
-| `--nevents`         | *required*, events per job                                |
-| `--particle`        | `22` (photon pdgId)                                       |
-| `--partname`        | `photon` (used for file naming)                           |
-| `--outdir`          | `/store/user/$USER/production_tests/pre1_D121`            |
-| `--pileup`          | `0` (no PU). Set > 0 to enable minbias mixing.            |
-| `--nminbias`        | equal to `--nevents`. Minbias events per replica.         |
-| `--schedd`          | (unset) — pass e.g. `lpcschedd4.fnal.gov` to pin a schedd |
-| `--rebuild-tarball` | force rebuild the CMSSW tarball                           |
+| Flag                | Default                                                                 |
+|---------------------|-------------------------------------------------------------------------|
+| `--nreplicas`       | *required*                                                              |
+| `--nevents`         | *required*, signal events per replica                                   |
+| `--energy`          | fixed gun energy (GeV); or `--minE`/`--maxE` for a flat range (one of the two forms is required) |
+| `--particle`        | `22` (photon pdgId)                                                     |
+| `--partname`        | `photon` (used for file naming)                                         |
+| `--fine-calo`       | off (`useFineCalo=0`); incompatible with `--pileup`                     |
+| `--pileup`          | `0` (no PU). Set > 0 to enable minbias mixing.                          |
+| `--nminbias`        | equal to `--nevents`. Minbias events per replica.                       |
+| `--outdir`          | `/store/user/$USER/production_tests/pre1_D121` (LPC), `/eos/user/<u>/$USER/production_tests/pre1_D121` (CERN) |
+| `--workdir`         | `condor/` — where the DAG, submit file and `logs/` are written; must not be on EOS |
+| `--cmssw-base`      | `../../..` relative to this repo (= `$CMSSW_BASE` when it sits in `src/`) |
+| `--mode`            | `chain` (CERN) / `stages` (LPC)                                         |
+| `--keep`            | `nano` — chain mode: subset of `minbias,gsd,reco,nano` to stage out     |
+| `--canary`          | `0` (off) — events for a gating chain job all replicas depend on        |
+| `--flavour`         | `workday` (CERN `+JobFlavour`; LPC uses `+MaxRuntime = 86400`)          |
+| `--ncpus`           | `2` at CERN (GSD peaks at ~4.4 GB RSS, above the 3 GB-per-core slot default), `1` at LPC |
+| `--memory`          | CERN: unset (3 GB per requested core); LPC: `5000` MB                   |
+| `--disk`            | `20000000` KB                                                           |
+| `--nthreads`        | `1` thread per cmsRun step                                              |
+| `--seed-base`       | see above                                                               |
+| `--retry`           | `2` DAGMan retries per node                                             |
+| `--schedd`          | (unset) — pass e.g. `lpcschedd4.fnal.gov` to pin a schedd               |
+| `--rebuild-tarball` | force rebuild of the CMSSW tarball (LPC)                                |
+| `--dry-run`         | build the DAG and run the preflight checks, do not submit               |
+| `--no-write-test`   | skip the 1 MB write probe and the EOS quota check of `--outdir`         |
 
 Outputs land at
-`root://cmseos.fnal.gov/${outdir}/{GSD,RECO,nanoML}/${partname}_E${energy}_rep${N}_*.root`
-(or under the local path if `--outdir` is a plain filesystem path). When
-`--pileup > 0`, an additional `MINBIAS/` subdirectory is populated with
-the minbias GEN-SIM libraries used for the mix.
+`${outdir}/{MINBIAS,GSD,RECO,nanoML}/<partname>_<stdCalo|fineCalo>[_PU<N>]_E<min>[to<max>]_rep<N>_<STEP>.root`
+(chain mode writes only the kept products; the canary writes under
+`${outdir}/canary/`). `/store/...` paths go through `cmseos.fnal.gov`,
+`/eos/user` and `/eos/cms` paths through `eosuser.cern.ch` /
+`eoscms.cern.ch`; anything else is treated as a shared filesystem.
+
+Resource footprint per job (single tau, flat 20–200 GeV, no PU, 1 thread,
+measured Sep/Oct 2026 on lxplus): GSD ≈ 4.2 s/event and 4.4 GB peak RSS
+(5.2 GB with 2 threads), RECO ≈ 0.45 s/event and 3.3 GB, nanoML ≈ 0.3 s/event
+and 2.4 GB, plus a few minutes of initialisation per step. Output sizes ≈
+1.2 MB/event (GSD), 1.5 MB/event (RECO), 0.15 MB/event (nanoML), i.e. a
+500-event chain job takes ~45 min and leaves a 75 MB nanoML file.
 
 Monitor / retry:
 
 ```shell
 condor_q -dag $USER
-tail -f pipeline_${partname}_E${energy}.dag.dagman.out
+tail -f <workdir>/pipeline_<sample>.dag.dagman.out
 
 # Retry from where it left off (uses rescue file)
-condor_submit_dag -f pipeline_${partname}_E${energy}.dag
+cd <workdir> && condor_submit_dag -f pipeline_<sample>.dag
 
 # Full reset (empty the queue first)
 condor_rm $USER
