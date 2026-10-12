@@ -6,6 +6,8 @@ from tqdm import tqdm
 import os, pathlib
 import argparse
 import gc
+import shutil
+import subprocess
 import pyarrow.parquet as pq
 import pyarrow as pa
 
@@ -19,7 +21,12 @@ def parse_args():
                     'negative endcap is mirrored (z -> -z, eta -> -eta) so both look like +z.'
     )
     parser.add_argument('--nanoMLfiles', nargs='+', required=True, help='List of nanoML root files')
-    parser.add_argument('--outputDir', type=str, default="parquet_out", help='Output directory for parquet files')
+    parser.add_argument('--outputDir', type=str, default="parquet_out",
+                        help='Where to write the parquet file: a local directory, or an XRootD URL '
+                             '(root://host//path, e.g. root://cmsdata.phys.cmu.edu//store/group/...) '
+                             'to stream it straight to remote storage. The latter needs the XRootD '
+                             'python bindings (available in LCG views, not in the hgcal-offline-reco '
+                             'image); without them the file is staged locally and xrdcp-ed at the end')
     parser.add_argument('--outputFile', type=str, default="output.parquet", help='Output parquet filename')
     parser.add_argument('--compression', type=str, default='lz4', help='Parquet compression algorithm')
     parser.add_argument('--step_size', type=int, default=500,
@@ -28,6 +35,12 @@ def parse_args():
                              'file size (default: 500)')
     parser.add_argument('--max_events', type=int, default=None,
                         help='Only convert the first N events of each file (for tests)')
+    parser.add_argument('--stage-dir', type=str, default=os.environ.get('TMPDIR', '/tmp'),
+                        help='root:// outputs without the XRootD python bindings only: local directory '
+                             'holding the whole file until it is xrdcp-ed (default: $TMPDIR or /tmp)')
+    parser.add_argument('--overwrite', action='store_true',
+                        help='Replace an existing root:// output file (by default the script refuses '
+                             'to start if the remote file already exists)')
     # kept for backwards compatibility; files are now streamed one chunk at a time
     parser.add_argument('--batch_size', type=int, default=None, help=argparse.SUPPRESS)
 
@@ -701,6 +714,233 @@ def build_endcap(batch, side):
 
 
 
+# ---------------------------------------------------------------------------
+# Output destination: local directory or XRootD URL (root://host//path)
+# ---------------------------------------------------------------------------
+#
+# With --outputDir root://host//path the parquet file is streamed to the
+# remote storage one row group at a time, so the (multi-GB) output never needs
+# local disk space. The remote file is written as <name>.part and renamed on
+# success, so a file carrying the final name is always complete; on any error
+# the partial file is removed. Requires the XRootD python bindings (LCG views
+# have them; the hgcal-offline-reco apptainer image does not): without them
+# the file is staged in --stage-dir and copied with xrdcp at the end.
+
+XROOTD_PREFIX = "root://"
+
+
+def is_xrootd_url(path):
+    return str(path).startswith(XROOTD_PREFIX)
+
+
+def _split_xrootd_url(url):
+    """'root://host[:port]//path' -> ('root://host[:port]', '/path')."""
+    host, sep, path = url[len(XROOTD_PREFIX):].partition("/")
+    if not host or not sep or not path.strip("/"):
+        raise ValueError(f"malformed XRootD URL {url!r}: expected root://host//path")
+    return XROOTD_PREFIX + host, "/" + path.lstrip("/")
+
+
+class _XRootDOutputFile:
+    """Write-only file object over XRootD.client.File with the interface
+    pyarrow.parquet.ParquetWriter needs (write/tell/flush/close).
+
+    pyarrow writes a parquet row group as hundreds of small pieces (one per
+    column page); each XRootD write is a synchronous round trip, which over a
+    transatlantic link costs ~2 min per row group. Writes are therefore
+    buffered and sent in CHUNK-sized requests."""
+
+    CHUNK = 32 << 20
+
+    def __init__(self, url):
+        from XRootD import client
+        from XRootD.client.flags import AccessMode, OpenFlags
+        self.url = url
+        self._pos = 0          # bytes already sent
+        self._buf = bytearray()
+        self.closed = False
+        self._f = client.File()
+        # mode 0644 like xrdcp (the bindings' default leaves the file 0600,
+        # unreadable by the other users of a group area)
+        mode = AccessMode.UR | AccessMode.UW | AccessMode.GR | AccessMode.OR
+        status, _ = self._f.open(url, OpenFlags.DELETE | OpenFlags.MAKEPATH, mode)
+        if not status.ok:
+            raise OSError(f"cannot open {url} for writing: {status.message}")
+
+    def write(self, data):
+        view = memoryview(data).cast("B")
+        self._buf += view
+        if len(self._buf) >= self.CHUNK:
+            self._send()
+        return len(view)
+
+    def _send(self):
+        buf, self._buf = memoryview(self._buf), bytearray()
+        for start in range(0, len(buf), self.CHUNK):
+            piece = buf[start:start + self.CHUNK].tobytes()
+            status, _ = self._f.write(piece, offset=self._pos)
+            if not status.ok:
+                raise OSError(f"XRootD write to {self.url} failed at offset "
+                              f"{self._pos}: {status.message}")
+            self._pos += len(piece)
+
+    def tell(self):
+        return self._pos + len(self._buf)
+
+    def flush(self):
+        self._send()
+
+    def readable(self):
+        return False
+
+    def writable(self):
+        return True
+
+    def seekable(self):
+        return False
+
+    def close(self):
+        # ParquetWriter.close() closes its sink itself; stay idempotent so the
+        # output target can close it again.
+        if self.closed:
+            return
+        self._send()
+        self.closed = True
+        status, _ = self._f.close()
+        if not status.ok:
+            raise OSError(f"XRootD close of {self.url} failed: {status.message}")
+
+
+class LocalOutput:
+    """Plain local file, written in place (unchanged behaviour)."""
+
+    def __init__(self, outdir, outfile):
+        outdir = pathlib.Path(outdir)
+        outdir.mkdir(exist_ok=True)
+        self.final = str(outdir / outfile)
+
+    def describe(self):
+        return f"local file {self.final}"
+
+    def sink(self):
+        return self.final
+
+    def finalize(self):
+        pass
+
+    def abort(self):
+        pass
+
+
+class XRootDStreamOutput:
+    """Stream the parquet file to root://host//path through the XRootD python
+    bindings, as <path>.part, renamed to <path> once complete."""
+
+    def __init__(self, url, overwrite):
+        from XRootD import client
+        self.host, self.path = _split_xrootd_url(url)
+        self.part = self.path + ".part"
+        self.final = f"{self.host}/{self.path}"
+        self.overwrite = overwrite
+        self._fs = client.FileSystem(self.host)
+        status, _ = self._fs.stat(self.path)
+        if status.ok and not overwrite:
+            raise FileExistsError(
+                f"{self.final} already exists; remove it or pass --overwrite")
+        # Open the remote file now, so that path/permission problems show up
+        # at startup rather than after the first chunk has been processed.
+        self._file = _XRootDOutputFile(f"{self.host}/{self.part}")
+
+    def describe(self):
+        return (f"XRootD stream to {self.final} (written as {self.part}, "
+                "renamed when complete)")
+
+    def sink(self):
+        return self._file
+
+    def finalize(self):
+        written = self._file.tell()
+        self._file.close()
+        if written == 0:  # no chunk was written: leave no empty file behind
+            self._fs.rm(self.part)
+            return
+        if self.overwrite:
+            self._fs.rm(self.path)  # may not exist; mv below reports real errors
+        status, _ = self._fs.mv(self.part, self.path)
+        if not status.ok:
+            raise OSError(
+                f"cannot rename {self.part} to {self.path} on {self.host}: "
+                f"{status.message}. The complete file is at {self.host}/{self.part}")
+
+    def abort(self):
+        try:
+            self._file.close()
+        except OSError:
+            pass
+        status, _ = self._fs.rm(self.part)
+        print(f"Removed partial output {self.host}/{self.part}" if status.ok
+              else f"WARNING: could not remove partial output {self.host}/{self.part}: {status.message}")
+
+
+class XRootDStagedOutput:
+    """Fallback without the XRootD python bindings: write to a local staging
+    file and xrdcp it to root://host//path at the end (needs disk space for
+    the whole file in --stage-dir)."""
+
+    def __init__(self, url, outfile, stage_dir, overwrite):
+        self.final = url
+        self.overwrite = overwrite
+        stage_dir = pathlib.Path(stage_dir)
+        stage_dir.mkdir(parents=True, exist_ok=True)
+        self.local = stage_dir / outfile
+        host, path = _split_xrootd_url(url)
+        if not overwrite and shutil.which("xrdfs") is not None:
+            exists = subprocess.run(["xrdfs", host, "stat", path],
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if exists.returncode == 0:
+                raise FileExistsError(f"{url} already exists; remove it or pass --overwrite")
+
+    def describe(self):
+        return f"local staging file {self.local}, xrdcp-ed to {self.final} at the end"
+
+    def sink(self):
+        return str(self.local)
+
+    def finalize(self):
+        if not self.local.exists():
+            return
+        cmd = ["xrdcp", "-p"] + (["-f"] if self.overwrite else []) + [str(self.local), self.final]
+        print("Copying to remote storage:", " ".join(cmd))
+        try:
+            subprocess.run(cmd, check=True)
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(
+                f"xrdcp failed (exit {e.returncode}); the complete file is still at {self.local}") from e
+        self.local.unlink()
+
+    def abort(self):
+        if self.local.exists():
+            self.local.unlink()
+            print(f"Removed partial staging file {self.local}")
+
+
+def make_output(outdir, outfile, stage_dir, overwrite):
+    """Pick the output backend from --outputDir."""
+    if not is_xrootd_url(outdir):
+        return LocalOutput(outdir, outfile)
+    url = outdir.rstrip("/") + "/" + outfile
+    try:
+        import XRootD.client  # noqa: F401
+    except ImportError:
+        if shutil.which("xrdcp") is None:
+            raise RuntimeError(
+                f"writing to {url} needs the XRootD python bindings (e.g. an LCG view: "
+                "source /cvmfs/sft.cern.ch/lcg/views/LCG_109/x86_64-el9-gcc13-opt/setup.sh) "
+                "or at least xrdcp in PATH for the staged fallback; this python has neither")
+        return XRootDStagedOutput(url, outfile, stage_dir, overwrite)
+    return XRootDStreamOutput(url, overwrite)
+
+
 def _chunk_to_table(chunk, schema):
     """Convert one chunk to an arrow table with the schema of the first chunk.
 
@@ -770,10 +1010,9 @@ def main():
 
     MLfileList = args.nanoMLfiles
 
-    # Create output directory
-    outdir = pathlib.Path(args.outputDir)
-    outdir.mkdir(exist_ok=True)
-    output_path = outdir / args.outputFile
+    # Local directory or root://host//path (see make_output); fails early if
+    # the remote file exists or the python lacks XRootD support.
+    output = make_output(args.outputDir, args.outputFile, args.stage_dir, args.overwrite)
 
     # Stream every file in chunks of --step_size events; each chunk becomes one
     # row group of the single output parquet file, so peak memory is bounded by
@@ -790,40 +1029,54 @@ def main():
     print(f"Endcap split: 2 output events per input event "
           f"(-z endcap mirrored via z->-z, eta->-eta)")
     print(f"Candidate links assumed to point into: {CAND_TRACKSTER_COLLECTION}")
-    print(f"Writing incrementally to {output_path}")
+    print(f"Writing incrementally to {output.describe()}")
 
     parquet_writer = None
     schema = None
     n_written = 0
 
-    for i, f in enumerate(MLfileList):
-        with uproot.open(f)["Events"] as tree:
-            chunks = list(_iter_chunks(tree, step_size, args.max_events))
-            print(f"\nFile {i+1}/{n_files}: {f} ({tree.num_entries} events, {len(chunks)} chunks)")
-            for start, stop in tqdm(chunks, desc="  chunks", leave=False):
-                chunk = process_chunk(tree, start, stop)
+    try:
+        for i, f in enumerate(MLfileList):
+            with uproot.open(f)["Events"] as tree:
+                chunks = list(_iter_chunks(tree, step_size, args.max_events))
+                print(f"\nFile {i+1}/{n_files}: {f} ({tree.num_entries} events, {len(chunks)} chunks)")
+                for start, stop in tqdm(chunks, desc="  chunks", leave=False):
+                    chunk = process_chunk(tree, start, stop)
 
-                # Convert to arrow table (schema fixed by the first chunk)
-                table, schema = _chunk_to_table(chunk, schema)
+                    # Convert to arrow table (schema fixed by the first chunk)
+                    table, schema = _chunk_to_table(chunk, schema)
 
-                # Write or append to parquet (one row group per chunk)
-                if parquet_writer is None:
-                    parquet_writer = pq.ParquetWriter(
-                        output_path,
-                        schema,
-                        compression=args.compression,
-                    )
-                parquet_writer.write_table(table)
-                n_written += len(chunk)
+                    # Write or append to parquet (one row group per chunk)
+                    if parquet_writer is None:
+                        parquet_writer = pq.ParquetWriter(
+                            output.sink(),
+                            schema,
+                            compression=args.compression,
+                        )
+                    parquet_writer.write_table(table)
+                    n_written += len(chunk)
 
-                del chunk, table
-                gc.collect()
+                    del chunk, table
+                    gc.collect()
 
-    if parquet_writer:
-        parquet_writer.close()
+        if parquet_writer:
+            parquet_writer.close()
+        output.finalize()
+    except BaseException:
+        # Leave no half-written file behind on remote storage (local outputs
+        # are left as they are). Close the writer first so pyarrow does not
+        # try to flush into an already-removed file afterwards.
+        if parquet_writer is not None:
+            try:
+                parquet_writer.close()
+            except Exception:
+                pass
+            parquet_writer = None
+        output.abort()
+        raise
     print(f"Wrote {n_written} split events ({n_written // 2} input events)")
 
-    print(f"\nDone! Created single parquet file: {output_path}")
+    print(f"\nDone! Created single parquet file: {output.final}")
 
 
 if __name__ == "__main__":
