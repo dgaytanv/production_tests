@@ -316,8 +316,10 @@ configuration) combination:
 | -------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | tau (`15`)     | [`generate_taus_FineCalo.sh`](scripts/generate_taus_FineCalo.sh)                           | [`generate_taus_noFineCalo.sh`](scripts/generate_taus_noFineCalo.sh)                           |
 | photon (`22`)  | [`generate_photons_FineCalo.sh`](scripts/generate_photons_FineCalo.sh)                     | [`generate_photons_noFineCalo.sh`](scripts/generate_photons_noFineCalo.sh)                     |
+| pi+ (`211`)    | —                                                                                        | [`generate_pions_noFineCalo.sh`](scripts/generate_pions_noFineCalo.sh)                         |
+| K0L (`130`)    | —                                                                                        | [`generate_K0L_noFineCalo.sh`](scripts/generate_K0L_noFineCalo.sh)                             |
 
-All four are thin wrappers around the shared driver
+All of them are thin wrappers around the shared driver
 [`scripts/chain_common.sh`](scripts/chain_common.sh), which holds the
 actual chain logic (argument parsing, step sequencing, logging, error
 handling). `chain_common.sh` is sourced, not executed directly.
@@ -350,6 +352,10 @@ bash scripts/generate_photons_noFineCalo.sh /path/to/output/folder 1000
 # MINBIAS_GENSIM.py (seed = signal seed + 500000), unless --pu is given.
 bash scripts/generate_photons_noFineCalo.sh /path/to/out 500 --pileup 140 --nminbias 500
 
+# Fixed energy with the closeBy gun (one particle on the +z HGCAL face, as in
+# the earlier GNN energy-resolution samples)
+bash scripts/generate_K0L_noFineCalo.sh /path/to/out 1000 --gun closeBy --minE 10 --maxE 10
+
 # Anything else: --help lists every option
 bash scripts/generate_taus_FineCalo.sh --help
 ```
@@ -360,6 +366,7 @@ Options (all optional, after the two positional arguments):
 | ------ | ------- |
 | `--seed N` | random seed for the GSD step (default `1`) |
 | `--minE X` / `--maxE X` | gun energy range in GeV (defaults `20.0` / `200.0`) |
+| `--gun NAME` | `flatEta` (default) or `closeBy`, see the GSD options; `closeBy` leaves -z empty, so keep the default (non-split) parquet |
 | `--nthreads N` | threads per `cmsRun` step (default `1`) |
 | `--pileup N` | average pileup (default `0`); `noFineCalo` scripts only |
 | `--pu FILE` | mix an existing minbias GEN-SIM file instead of generating one |

@@ -43,6 +43,13 @@ Options:
   --seed N               random seed for the GSD step (default: 1)
   --minE X               gun minimum energy in GeV (default: 20.0)
   --maxE X               gun maximum energy in GeV (default: 200.0)
+  --gun NAME             particle gun (default: flatEta):
+                           flatEta  from the origin, one particle into each endcap,
+                                    |eta| 1.5-3.0
+                           closeBy  one particle starting on the +z HGCAL front face
+                                    (R 60-120 cm, z 320-321 cm), as in the earlier GNN
+                                    energy-resolution samples; -z stays empty, so keep
+                                    the default (non-split) parquet
   --nthreads N           threads per cmsRun step (default: 1)
 ${pu_note}
   --run-pftruth          enable the PFTruth sequence in nanoML (broken with pileup)
@@ -164,7 +171,7 @@ run_chain() {
 
     # ---- defaults -------------------------------------------------------
     local OUTPUT_DIR="" NEVENTS=1000
-    local SEED=1 MIN_ENERGY=20.0 MAX_ENERGY=200.0 NTHREADS=1
+    local SEED=1 MIN_ENERGY=20.0 MAX_ENERGY=200.0 GUN=flatEta NTHREADS=1
     local PILEUP=0 PU_FILE="" NMINBIAS=""
     local RUN_PFTRUTH=0 DO_PARQUET=1 SPLIT=0
     RESUME=0
@@ -179,6 +186,7 @@ run_chain() {
             --seed)        SEED="$2";        shift 2 ;;
             --minE|--mine) MIN_ENERGY="$2";  shift 2 ;;
             --maxE|--maxe) MAX_ENERGY="$2";  shift 2 ;;
+            --gun)         GUN="$2";         shift 2 ;;
             --nthreads)    NTHREADS="$2";    shift 2 ;;
             --pileup)      PILEUP="$2";      shift 2 ;;
             --pu)          PU_FILE="$2";     shift 2 ;;
@@ -209,6 +217,11 @@ run_chain() {
     [ -z "$NMINBIAS" ] && NMINBIAS="$NEVENTS"
 
     # ---- sanity checks --------------------------------------------------
+    case "$GUN" in
+        flatEta|closeBy) ;;
+        *) chain_die "--gun must be flatEta or closeBy (got '$GUN')" ;;
+    esac
+
     if [ "$DRY_RUN" -eq 0 ] && ! command -v cmsRun >/dev/null 2>&1; then
         chain_die "cmsRun not found in PATH. Did you run 'cmsenv' in this CMSSW area first?"
     fi
@@ -252,6 +265,7 @@ run_chain() {
     echo "  events        : $NEVENTS"
     echo "  seed          : $SEED"
     echo "  energy range  : ${MIN_ENERGY} - ${MAX_ENERGY} GeV"
+    echo "  gun           : $GUN"
     echo "  threads       : $NTHREADS"
     if [ "$PILEUP" -gt 0 ]; then
         if [ -n "$PU_FILE" ]; then
@@ -304,6 +318,7 @@ run_chain() {
         particle="$PARTICLE"
         minE="$MIN_ENERGY"
         maxE="$MAX_ENERGY"
+        gun="$GUN"
         outputFile="$GSD_FILE"
     )
     [ "$PILEUP" -gt 0 ] && gsd_args+=(pu="$PU_FILE")
