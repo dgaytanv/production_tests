@@ -49,6 +49,11 @@ cmsRun GSD_GUN.py seed=1 outputFile=testGSD.root useFineCalo=1
 Options:
 - `seed=N` — random seed and first lumiBlock (required for unique output)
 - `nParticles=N` — particles per event
+- `gun={flatEta,closeBy}` — `flatEta` (default) shoots from the origin,
+  `nParticles` into each endcap, |η| 1.5–3.0. `closeBy` starts `nParticles`
+  on the +z HGCAL front face (R 60–120 cm, z 320–321 cm) pointing away from
+  the origin, so the particle never crosses the tracker; this matches the
+  earlier GNN energy-resolution samples.
 - `useFineCalo={0,1}` — fineCalo on/off
 - `pileup=N` — average PU (0 = no PU). Requires `pu=<file>` when > 0
   (see "MINBIAS" section below).
@@ -191,6 +196,7 @@ Options (`submit_dag.sh` accepts every `build_dag.sh` option):
 | `--particle`        | `22` (photon pdgId)                                                     |
 | `--partname`        | `photon` (used for file naming)                                         |
 | `--fine-calo`       | off (`useFineCalo=0`); incompatible with `--pileup`                     |
+| `--gun`             | `flatEta`; `closeBy` starts the particle on the HGCAL front face (see GSD options) |
 | `--pileup`          | `0` (no PU). Set > 0 to enable minbias mixing.                          |
 | `--nminbias`        | equal to `--nevents`. Minbias events per replica.                       |
 | `--outdir`          | `/store/user/$USER/production_tests/pre1_D121` (LPC), `/eos/user/<u>/$USER/production_tests/pre1_D121` (CERN) |

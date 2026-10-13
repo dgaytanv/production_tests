@@ -19,6 +19,7 @@
 #   pileup=N         average PU (0 = none)
 #   nminbias=N       minbias events to generate for the PU library (default nevents)
 #   finecalo=0|1     useFineCalo for GSD_GUN.py (default 0)
+#   gun=NAME         particle gun for GSD_GUN.py: flatEta (default) or closeBy
 #   nthreads=N       threads for every cmsRun step (default 1)
 #   keep=LIST        chain only: comma-separated subset of minbias,gsd,reco,nano
 #                    to stage out (default nano)
@@ -35,7 +36,7 @@ set -eu -o pipefail
 
 STAGE=""; PARTICLE=""; PARTNAME=""; MINE=20.0; MAXE=200.0; ENERGY=""
 SEED=""; REPLICA=""; NEVENTS=""; OUTDIR=""; PILEUP=0; NMINBIAS=""
-FINECALO=0; NTHREADS=1; KEEP="nano"; CMSSW=""; PRODTESTS=""
+FINECALO=0; GUN=flatEta; NTHREADS=1; KEEP="nano"; CMSSW=""; PRODTESTS=""
 
 for kv in "$@"; do
     key="${kv%%=*}"; val="${kv#*=}"
@@ -53,6 +54,7 @@ for kv in "$@"; do
         pileup)     PILEUP="$val" ;;
         nminbias)   NMINBIAS="$val" ;;
         finecalo)   FINECALO="$val" ;;
+        gun)        GUN="$val" ;;
         nthreads)   NTHREADS="$val" ;;
         keep)       KEEP="$val" ;;
         cmssw)      CMSSW="$val" ;;
@@ -95,7 +97,7 @@ NANO_OUT="${TAG}_nanoML.root"
 
 echo "=== $(hostname) $(date -u +%FT%TZ) STAGE=$STAGE TAG=$TAG ==="
 echo "    particle=$PARTICLE  E=[$MINE,$MAXE] GeV  seed=$SEED  nevents=$NEVENTS  pileup=$PILEUP  nminbias=$NMINBIAS"
-echo "    finecalo=$FINECALO  nthreads=$NTHREADS  keep=$KEEP"
+echo "    finecalo=$FINECALO  gun=$GUN  nthreads=$NTHREADS  keep=$KEEP"
 echo "    outdir=$OUTDIR"
 echo "    sandbox=$PWD"
 echo
@@ -183,7 +185,7 @@ run_minbias() {
 run_gsd() {
     echo "--- GSD $(date -u +%FT%TZ): $NEVENTS events, seed=$SEED"
     local args=(seed="$SEED" particle="$PARTICLE" minE="$MINE" maxE="$MAXE"
-                useFineCalo="$FINECALO" maxEvents="$NEVENTS" nThreads="$NTHREADS"
+                useFineCalo="$FINECALO" gun="$GUN" maxEvents="$NEVENTS" nThreads="$NTHREADS"
                 pileup="$PILEUP" outputFile="$GSD_OUT")
     [ "$PILEUP" -gt 0 ] && args+=(pu="$MINBIAS_OUT")
     "${TIME[@]}" cmsRun "$CFG_DIR/GSD_GUN.py" "${args[@]}"

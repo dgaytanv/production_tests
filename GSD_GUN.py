@@ -31,6 +31,9 @@ options.register("maxE", 200.0, VarParsing.multiplicity.singleton, VarParsing.va
 options.register("pu", "", VarParsing.multiplicity.singleton, VarParsing.varType.string,
     "path to a minbias GEN-SIM file to mix as pileup (from MINBIAS_GENSIM.py); "
     "required when pileup>0.")
+options.register("gun", "flatEta", VarParsing.multiplicity.singleton, VarParsing.varType.string,
+    "particle gun: flatEta (from the origin, nParticles into each endcap, |eta| 1.5-3.0) "
+    "or closeBy (nParticles starting on the +z HGCal front face, R 60-120 cm, z 320-321 cm)")
 options.parseArguments()
 
 # Import process based on useFineCalo and pileup flags.
@@ -89,30 +92,65 @@ def calculate_rho(z, eta):
     return z * math.tan(2 * math.atan(math.exp(-eta)))
 
 
-process.generator = cms.EDProducer("edm::FlatEtaRangeGunProducer",
-    PGunParameters = cms.PSet(
-        # particle id (configurable via --particle)
-        PartID=cms.vint32(int(options.particle)),
-        # max number of particles to shoot at a time
-        nParticles=cms.int32(options.nParticles),
-        # shoot exactly the particles defined in particleIDs in that order
-        exactShoot=cms.bool(False),
-        # randomly shoot [1, nParticles] particles, each time randomly drawn
-        randomShoot=cms.bool(False),
-        # energy range (fixed; MinE=MaxE=options.energy)
-        MinE=cms.double(float(options.minE)),
-        MaxE=cms.double(float(options.maxE)),
-        # phi range
-        MinPhi=cms.double(-math.pi),
-        MaxPhi=cms.double(math.pi),
-        # eta range
-        MinEta=cms.double(1.5),
-        MaxEta=cms.double(3.0),
-    ),
-    AddAntiParticle=cms.bool(False),
-    debug=cms.untracked.bool(True),
-    firstRun=cms.untracked.uint32(1)
-)
+if options.gun == "flatEta":
+    process.generator = cms.EDProducer("edm::FlatEtaRangeGunProducer",
+        PGunParameters = cms.PSet(
+            # particle id (configurable via --particle)
+            PartID=cms.vint32(int(options.particle)),
+            # max number of particles to shoot at a time
+            nParticles=cms.int32(options.nParticles),
+            # shoot exactly the particles defined in particleIDs in that order
+            exactShoot=cms.bool(False),
+            # randomly shoot [1, nParticles] particles, each time randomly drawn
+            randomShoot=cms.bool(False),
+            # energy range (fixed; MinE=MaxE=options.energy)
+            MinE=cms.double(float(options.minE)),
+            MaxE=cms.double(float(options.maxE)),
+            # phi range
+            MinPhi=cms.double(-math.pi),
+            MaxPhi=cms.double(math.pi),
+            # eta range
+            MinEta=cms.double(1.5),
+            MaxEta=cms.double(3.0),
+        ),
+        AddAntiParticle=cms.bool(False),
+        debug=cms.untracked.bool(True),
+        firstRun=cms.untracked.uint32(1)
+    )
+elif options.gun == "closeBy":
+    # Same geometry as the earlier GNN energy-resolution samples
+    # (metrics-data/{Gamma,Pion,Kaon}_Step3): the vertex is flat in R and z on
+    # the +z HGCal front face and the momentum points away from the origin, so
+    # the particle never crosses the tracker. These are the producer's own
+    # defaults except NParticles (2 by default).
+    process.generator = cms.EDProducer("CloseByParticleGunProducer",
+        PGunParameters = cms.PSet(
+            PartID=cms.vint32(int(options.particle)),
+            NParticles=cms.int32(options.nParticles),
+            RandomShoot=cms.bool(False),
+            Overlapping=cms.bool(False),
+            # energy flat in [minE, maxE] (VarMin/VarMax are energies unless
+            # FlatPtGeneration)
+            VarMin=cms.double(float(options.minE)),
+            VarMax=cms.double(float(options.maxE)),
+            MaxVarSpread=cms.bool(False),
+            FlatPtGeneration=cms.bool(False),
+            # vertex position (cm), R-controlled rather than eta-controlled
+            ControlledByEta=cms.bool(False),
+            RMin=cms.double(60.),
+            RMax=cms.double(120.),
+            ZMin=cms.double(320.),
+            ZMax=cms.double(321.),
+            MinPhi=cms.double(-math.pi),
+            MaxPhi=cms.double(math.pi),
+            Pointing=cms.bool(True),
+            UseDeltaT=cms.bool(False),
+        ),
+        AddAntiParticle=cms.bool(False),
+        firstRun=cms.untracked.uint32(1)
+    )
+else:
+    raise ValueError(f"unknown gun '{options.gun}' (expected flatEta or closeBy)")
 
 process.options.numberOfThreads = cms.untracked.uint32(options.nThreads)
 
