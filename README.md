@@ -402,3 +402,26 @@ packages, point at one that does:
 ```shell
 export PARQUET_PYTHON=/path/to/conda/envs/<env>/bin/python3
 ```
+
+### Batch submission of the one-shot scripts (LPC)
+
+[`condor/submit_oneshot.sh`](condor/submit_oneshot.sh) runs the one-shot
+chain as LPC HTCondor jobs, one per (particle, energy, batch). Each job
+([`condor/run_oneshot.sh`](condor/run_oneshot.sh)) unpacks the CMSSW
+tarball, runs `scripts/generate.sh` for its batch and copies everything it
+writes (GSD, RECO, nanoML, parquet, logs) to
+`<outdir>/<partname>_E<E>/batch<b>/` on EOS, even when a step fails. Batch
+`b` of pdgId `P` at energy `E` uses seed `P*100000 + E*1000 + seed_offset + b`
+(`--seed-offset`, default 10). The parquet step runs with the LCG_109
+python (`PARQUET_PYTHON`) because the apptainer image is not used in batch
+jobs. Options after `--` go to every `generate.sh` call.
+
+```shell
+# From a shell without cmsenv, with a VOMS proxy. Defaults: photons (22),
+# pions (211), K0L (130); 2-300 GeV; 4 batches x 250 events per energy.
+bash condor/submit_oneshot.sh \
+    --outdir /store/user/$USER/production_tests/pre1_D121/closeBy_Escan_oneshot \
+    --workdir /uscms_data/d1/$USER/condor_work/closeBy_Escan_oneshot -- --gun closeBy
+
+# --dry-run writes the submit file and job list without submitting
+```
