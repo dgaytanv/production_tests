@@ -2,14 +2,18 @@
 #
 # Shared driver for the one-shot production chains in scripts/.
 #
-# This file is *not* meant to be executed directly. Each of the four wrappers
+# This file is *not* meant to be executed directly. The generic entry point
+# generate.sh (particle chosen with --particle) and the per-particle wrappers
 #
 #   generate_photons_FineCalo.sh    generate_photons_noFineCalo.sh
 #   generate_taus_FineCalo.sh       generate_taus_noFineCalo.sh
+#   generate_pions_noFineCalo.sh    generate_K0L_noFineCalo.sh
 #
-# sets PARTICLE / PARTNAME / USE_FINE_CALO, sources this file and calls
+# set PARTICLE / PARTNAME / USE_FINE_CALO, source this file and call
 #
 #   run_chain "$@"
+#
+# --particle / --partname / --fine-calo override those defaults.
 #
 # which runs   [MINBIAS] -> GSD -> RECO -> nanoML -> parquet
 # as a sequence of local `cmsRun` invocations (single machine, no batch system).
@@ -32,7 +36,7 @@ chain_usage() {
     cat <<EOF
 Usage: $CHAIN_SCRIPT_NAME <output_directory> [n_events] [options]
 
-Runs the full ${PARTNAME} chain (useFineCalo=${USE_FINE_CALO}):
+Runs the full ${PARTNAME:-particle-gun} chain (useFineCalo=${USE_FINE_CALO}):
 [MINBIAS] -> GSD -> RECO -> nanoML -> parquet.
 
 Positional:
@@ -40,6 +44,10 @@ Positional:
   [n_events]             number of signal events to simulate (default: 1000)
 
 Options:
+  --particle PDGID       pdgId to shoot (default: ${PARTICLE:-none, required})
+  --partname NAME        name used in the output file names (default: derived from
+                         the pdgId, e.g. photons, pions, K0L, taus, pdg<N>)
+  --fine-calo            useFineCalo=1 (fine calorimeter truth, no pileup support)
   --seed N               random seed for the GSD step (default: 1)
   --minE X               gun minimum energy in GeV (default: 20.0)
   --maxE X               gun maximum energy in GeV (default: 200.0)
@@ -76,6 +84,19 @@ EOF
 chain_die() {
     echo "❌ $*" >&2
     exit 1
+}
+
+# chain_default_partname <pdgId> -> file-name tag used when --partname is not given
+chain_default_partname() {
+    case "$1" in
+        22)  echo photons ;;
+        11)  echo electrons ;;
+        15)  echo taus ;;
+        211) echo pions ;;
+        130) echo K0L ;;
+        321) echo kaons ;;
+        *)   echo "pdg${1/-/m}" ;;
+    esac
 }
 
 # Container with the python stack for root_to_parquet*.py (uproot, awkward,
@@ -179,10 +200,15 @@ run_chain() {
     local PARQUET_IMAGE="${PARQUET_IMAGE:-$DEFAULT_PARQUET_IMAGE}"
 
     # ---- argument parsing ----------------------------------------------
-    local positional=()
+    local positional=() partname_given=0
     while [ $# -gt 0 ]; do
         case "$1" in
             -h|--help)     chain_usage; exit 0 ;;
+            # a new --particle drops the wrapper's file-name tag unless
+            # --partname is given too (in either order)
+            --particle)    PARTICLE="$2"; [ "$partname_given" -eq 1 ] || PARTNAME=""; shift 2 ;;
+            --partname)    PARTNAME="$2"; partname_given=1; shift 2 ;;
+            --fine-calo)   USE_FINE_CALO=1;  shift ;;
             --seed)        SEED="$2";        shift 2 ;;
             --minE|--mine) MIN_ENERGY="$2";  shift 2 ;;
             --maxE|--maxe) MAX_ENERGY="$2";  shift 2 ;;
@@ -217,6 +243,10 @@ run_chain() {
     [ -z "$NMINBIAS" ] && NMINBIAS="$NEVENTS"
 
     # ---- sanity checks --------------------------------------------------
+    [ -n "$PARTICLE" ] || chain_die "no particle given: use --particle <pdgId>"
+    [[ "$PARTICLE" =~ ^-?[0-9]+$ ]] || chain_die "--particle must be an integer pdgId (got '$PARTICLE')"
+    [ -n "$PARTNAME" ] || PARTNAME=$(chain_default_partname "$PARTICLE")
+
     case "$GUN" in
         flatEta|closeBy) ;;
         *) chain_die "--gun must be flatEta or closeBy (got '$GUN')" ;;

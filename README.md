@@ -309,8 +309,10 @@ only the first N events of each file, for quick tests.
 For a quick single-particle-type campaign, [`scripts/`](scripts/)
 contains ready-made scripts that run the whole chain
 (optional MINBIAS → GSD → RECO → nanoML → parquet) in one command on a
-single machine. There is one script per (particle, calo-truth
-configuration) combination:
+single machine. [`scripts/generate.sh`](scripts/generate.sh) takes the
+particle as an option (`--particle <pdgId>`, plus `--fine-calo` for the
+fine calorimeter truth); the per-particle wrappers below are shortcuts
+that preset it:
 
 |                | `useFineCalo=1`                                                                          | `useFineCalo=0`                                                                              |
 | -------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
@@ -352,9 +354,13 @@ bash scripts/generate_photons_noFineCalo.sh /path/to/output/folder 1000
 # MINBIAS_GENSIM.py (seed = signal seed + 500000), unless --pu is given.
 bash scripts/generate_photons_noFineCalo.sh /path/to/out 500 --pileup 140 --nminbias 500
 
+# Any particle: --particle sets the pdgId (file names use --partname, by
+# default derived from it: photons, pions, K0L, taus, ... or pdg<N>)
+bash scripts/generate.sh /path/to/out 1000 --particle 211
+
 # Fixed energy with the closeBy gun (one particle on the +z HGCAL face, as in
 # the earlier GNN energy-resolution samples)
-bash scripts/generate_K0L_noFineCalo.sh /path/to/out 1000 --gun closeBy --minE 10 --maxE 10
+bash scripts/generate.sh /path/to/out 1000 --particle 130 --gun closeBy --minE 10 --maxE 10
 
 # Anything else: --help lists every option
 bash scripts/generate_taus_FineCalo.sh --help
@@ -364,6 +370,9 @@ Options (all optional, after the two positional arguments):
 
 | Option | Meaning |
 | ------ | ------- |
+| `--particle PDGID` | pdgId to shoot (required for `generate.sh`, preset by the wrappers) |
+| `--partname NAME` | tag used in the file names (default derived from the pdgId) |
+| `--fine-calo` | `useFineCalo=1` (fine calorimeter truth, no pileup support) |
 | `--seed N` | random seed for the GSD step (default `1`) |
 | `--minE X` / `--maxE X` | gun energy range in GeV (defaults `20.0` / `200.0`) |
 | `--gun NAME` | `flatEta` (default) or `closeBy`, see the GSD options; `closeBy` leaves -z empty, so keep the default (non-split) parquet |
