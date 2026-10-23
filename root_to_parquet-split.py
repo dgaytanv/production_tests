@@ -120,6 +120,12 @@ BRANCH_GROUPS = {
         'nCandidate2Tracksters',
         'nCandidate2TrackstersIndices',
         'Candidate2TrackstersIndices_tracksterIndex',
+        # CMSSW_20_1 (pre4_D128): the extra table extends TICLCand, so the
+        # per-candidate count lives here (the standalone nCandidate2Tracksters
+        # branch is gone; it equalled nTICLCand). Older names are kept for
+        # pre1_D121 files; filter_name skips whatever a file does not have.
+        'TICLCand_nCandidate2TrackstersIndices',
+        'TICLCand_oCandidate2TrackstersIndices',
         # Per-candidate count/offset of linked tracksters. These are needed to
         # regroup the flat Indices table per candidate for the endcap split.
         # If these names don't exist in your files (check tree.keys()), the
@@ -224,6 +230,9 @@ BRANCH_GROUPS["SimCandidate2Tracksters"] = [
     'SimCandidate2TrackstersIndices_tracksterIndex',
     'SimCandidate2Tracksters_nSimCandidate2TrackstersIndices',
     'SimCandidate2Tracksters_oSimCandidate2TrackstersIndices',
+    # CMSSW_20_1 (pre4_D128) names, see the Candidate2Tracksters group
+    'SimTICLCand_nSimCandidate2TrackstersIndices',
+    'SimTICLCand_oSimCandidate2TrackstersIndices',
 ]
 
 # Reco <-> Sim trackster association tables, e.g. CLUE3DHighToSimTSByHits
@@ -504,8 +513,17 @@ def _split_candidates(d, keep_cand, t_map, prefix="Candidate2Tracksters"):
     so the candidate endcap mask is reused; trackster indices are remapped
     into the split target trackster collection (t_map)."""
     idx_b = f'{prefix}Indices_tracksterIndex'
+    # Per-candidate count/offset branch names. pre1_D121 files carry them on
+    # the standalone extra table (Candidate2Tracksters_n...); since CMSSW_20_1
+    # (pre4_D128) the extra table extends the candidate table, so they are
+    # TICLCand_n... / SimTICLCand_n... . Take whichever the file has.
+    cand = {"Candidate2Tracksters": "TICLCand",
+            "SimCandidate2Tracksters": "SimTICLCand"}.get(prefix, prefix)
     cnt_b = f'{prefix}_n{prefix}Indices'
     off_b = f'{prefix}_o{prefix}Indices'
+    if cnt_b not in d.fields and f'{cand}_n{prefix}Indices' in d.fields:
+        cnt_b = f'{cand}_n{prefix}Indices'
+        off_b = f'{cand}_o{prefix}Indices'
 
     idx_flat = d[idx_b]
     remapped = _remap(idx_flat, t_map)

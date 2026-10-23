@@ -105,6 +105,12 @@ BRANCH_GROUPS = {
         'nCandidate2Tracksters',
         'nCandidate2TrackstersIndices',
         'Candidate2TrackstersIndices_tracksterIndex',
+        # CMSSW_20_1 (pre4_D128): the extra table extends TICLCand, so the
+        # per-candidate count lives here (the standalone nCandidate2Tracksters
+        # branch is gone; it equalled nTICLCand). Older names are kept for
+        # pre1_D121 files; filter_name skips whatever a file does not have.
+        'TICLCand_nCandidate2TrackstersIndices',
+        'TICLCand_oCandidate2TrackstersIndices',
     ],
     # Trackster kinematic + LayerCluster association tables. `..vertices`
     # branches expose per-trackster lists of LayerCluster indices and the
@@ -202,6 +208,9 @@ BRANCH_GROUPS["SimCandidate2Tracksters"] = [
     'SimCandidate2TrackstersIndices_tracksterIndex',
     'SimCandidate2Tracksters_nSimCandidate2TrackstersIndices',
     'SimCandidate2Tracksters_oSimCandidate2TrackstersIndices',
+    # CMSSW_20_1 (pre4_D128) names, see the Candidate2Tracksters group
+    'SimTICLCand_nSimCandidate2TrackstersIndices',
+    'SimTICLCand_oSimCandidate2TrackstersIndices',
 ]
 
 # Reco <-> Sim trackster association tables, e.g. CLUE3DHighToSimTSByHits

@@ -7,7 +7,7 @@
 # filter (SoftQCD).
 #
 # Ported from mmarchegiani/hgcal_pu_production/cfg_gensim_D110.py
-# (`thing=minbias` branch) but adapted for pre1/D121:
+# (`thing=minbias` branch) but adapted for 20_1_0_pre4/D128:
 #   - geometry, era, and conditions are inherited from pepr's GSD_fragment,
 #   - no cmsDriver.py step required at runtime.
 
@@ -30,7 +30,7 @@ options.register("useFineCalo", 0, VarParsing.multiplicity.singleton, VarParsing
 options.parseArguments()
 
 # Load the same GSD process fragment that GSD_GUN.py uses. This gives us
-# geometry (Run4D121), era (Phase2C22I13M9), magnetic field, sim modules,
+# geometry (Run4D128), era (Phase2C26I13M9), magnetic field, sim modules,
 # and the FEVTDEBUG output module — everything except the generator.
 if options.useFineCalo:
     from reco_prodtools.templates.GSDfineCalo_fragment import process

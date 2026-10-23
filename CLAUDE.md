@@ -6,24 +6,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a HGCal (High-Granularity Calorimeter) NanoML production test suite for the CMS experiment at CERN. It produces flat nanoAOD ntuples from simulated Phase-2 detector data for machine learning applications in HGCal reconstruction. It is a fork of [kdlong/production_tests](https://github.com/kdlong/production_tests), based on [CMS-HGCAL/reco-prodtools](https://github.com/CMS-HGCAL/reco-prodtools).
 
-**This is the `pre1_D121` branch**: `CMSSW_20_0_0_pre1` with the `Run4D121` geometry, where TICL is the default (and only) reconstruction path. The `CMSSW_15_1_0` / `Run4D110` version (with an opt-in `useTICL` flag and separate `nanoTICL_cfg.py`/`nanoTICL-ML_cfg.py` configs) lives on the `master` branch — those two configs do not exist on this branch.
+**This is the `pre4_D128` branch**: `CMSSW_20_1_0_pre4` with the `Run4D128` geometry, where TICL is the default (and only) reconstruction path. The `CMSSW_20_0_0_pre1` / `Run4D121` version lives on the `pre1_D121` branch. The `CMSSW_15_1_0` / `Run4D110` version (with an opt-in `useTICL` flag and separate `nanoTICL_cfg.py`/`nanoTICL-ML_cfg.py` configs) lives on the `master` branch — those two configs do not exist on this branch.
 
 ## Environment Setup
 
 ```shell
-export SCRAM_ARCH=el9_amd64_gcc13
-version=CMSSW_20_0_0_pre1
+export SCRAM_ARCH=el9_amd64_gcc14
+version=CMSSW_20_1_0_pre4
 cmsrel $version && cd $version/src && cmsenv
 git cms-init -y
 git cms-merge-topic dgaytanv:pepr_${version}
+git cms-checkdeps -a   # pepr changes the SimCluster layout: rebuild every package that uses it
 scram b -j 4      # -j 12 can OOM on cmslpc
 
-# Generate RECO fragment templates (D121 geometry)
+# Generate RECO fragment templates (D128 geometry)
 git clone git@github.com:dgaytanv/reco-prodtools.git reco_prodtools
-cd reco_prodtools/templates/python && ./produceSkeletons_D121.sh
+cd reco_prodtools/templates/python && ./produceSkeletons_D128.sh
 cd ../../.. && scram b
 
-git clone -b pre1_D121 git@github.com:dgaytanv/production_tests.git && cd production_tests
+git clone -b pre4_D128 git@github.com:dgaytanv/production_tests.git && cd production_tests
 ```
 
 ## Running the Production Chain
@@ -121,7 +122,7 @@ Selects between three base fragments: `GSDfineCalo_fragment` (`useFineCalo=1`, n
 Always imports `RECO_fragment` (TICL v5 is the default in pre1; the `ticl_v5`-suffixed fragment no longer exists, and `useTICL` is kept only for CLI compatibility). Explicitly instantiates and schedules truth-matching association producers (`lcAssocByEnergyScoreProducer`, `layerClusterCaloParticleAssociationProducer`, `scAssocByEnergyScoreProducer`, `layerClusterSimClusterAssociationProducer`, `simHitTPAssocProducer`, `trackingParticleRecoTrackAsssociation`) as a `cms.Task` added to `recosim_step`. Also schedules the MC-truth tracksters and their associators, which in CMSSW live only in the validation sequence: `filteredLayerClustersSimTracksters` + `ticlSimTracksters` (products under the single module label `ticlSimTracksters`: SimCluster/CaloParticle-seeded tracksters in the default instance, `fromCPs`, `PU`, sim `TICLCandidate`s, and a CaloParticle→SimTrackster index map), `allLayerClusterToTracksterAssociations`, `allHitToTracksterAssociations`, `hitToSimClusterCaloParticleAssociator`, `allTrackstersToSimTrackstersAssociationsByLCs`/`ByHits` (reco↔sim trackster scores, instance labels like `ticlTrackstersCLUE3DHighToticlSimTracksters`), and `SimClusterToCaloParticleAssociation`. Each SimTrackster carries `seedID()`/`seedIndex()` pointing at the SimCluster or CaloParticle it was built from (`mix:MergedCaloTruth`). Note the LC→SimCluster / LC→CaloParticle associator module labels must match their producer types, since `ticlSimTracksters` consumes them by label with distinct C++ types. Also runs pepr's `SimClusterMerger` (mergedSimClusters). The `outputCommands` list is carefully curated to retain all objects needed by `nanoML_cfg.py`.
 
 ### nanoML_cfg.py
-Builds a fresh `cms.Process('NANO')` (no imported base process; geometry loaded directly as `GeometryExtendedRun4D121`/`GeometryExtendedRun4D121Reco`). Loads `DPGAnalysis.HGCalNanoAOD.nanoHGCML_cff` and applies `customizeMergedSimClusters()` and `customizeReco()`. Disables `pfTruth`/`trackSCAssocTable` sequences when `runPFTruth=0` (needed with pileup). Removes the `iso` field from `genParticleTable` to avoid missing-product errors. Adds bespoke TICL nano tables not covered by the default event content:
+Builds a fresh `cms.Process('NANO')` (no imported base process; geometry loaded directly as `GeometryExtendedRun4D128`/`GeometryExtendedRun4D128Reco`). Loads `DPGAnalysis.HGCalNanoAOD.nanoHGCML_cff` and applies `customizeMergedSimClusters()` and `customizeReco()`. Disables `pfTruth`/`trackSCAssocTable` sequences when `runPFTruth=0` (needed with pileup). Removes the `iso` field from `genParticleTable` to avoid missing-product errors. Adds bespoke TICL nano tables not covered by the default event content:
 - `ticlCandidateTable` (`TICLCandidateTableProducer`) — kinematics for `ticlCandidate` → `TICLCand`.
 - `ticlCandidateExtraTable` (`TICLCandidateExtraTableProducer`) — `Candidate2Tracksters` index table linking TICLCandidates to their tracksters.
 - One `TracksterCollectionTableProducer` per TICL iteration (`ticlTrackstersCLUE3DHigh`, `ticlTracksterLinks`, `ticlTracksterRecovery`, `ticlTracksterLinksSuperclusteringDNN`), each carrying a `tracksterVertices` collection variable that gives the Trackster↔LayerCluster link.
@@ -135,7 +136,7 @@ Flatten nanoML ROOT files into parquet for ML training, grouping branches by obj
 
 ### Key Cross-Cutting Concerns
 
-- **D121 geometry**: All configs use `GeometryExtendedRun4D121` — the current Phase-2 HGCal geometry variant (D110 is the prior geometry, still used on `master`).
+- **D128 geometry**: All configs use `GeometryExtendedRun4D128` — the current Phase-2 HGCal geometry variant (D110 is the prior geometry, still used on `master`).
 - **TICL is always on**: unlike `master`, there is no no-TICL RECO path and no standalone TICL-only nano config; `useTICL` in `RECO.py` is a no-op kept for CLI compatibility.
 - **`canDeleteEarly`**: Applied via `customiseEarlyDelete(process)` in `nanoML_cfg.py` to reduce peak memory.
 - **Output content management**: `outputCommands.append/extend` is used deliberately — dropping a product here will break downstream steps that read it.
@@ -179,7 +180,7 @@ Every file carries the full nanoML content (~600 branches): HGCAL RecHits, Layer
 
 ### Exact commands
 
-All from a shell where `cmsenv` has NOT been sourced, with a valid kerberos ticket (production) or VOMS proxy (parquet to the T3). The CMSSW release area is `/afs/cern.ch/work/m/mmarcheg/private/ml4reco/phase2/CMSSW_20_0_0_pre1` (pepr overrides of `HLTrigger/NGTScouting`, `SimCalorimetry/HGCalAssociatorProducers`, `DPGAnalysis`, `IOMC`, `reco_prodtools` with the D121 skeletons); it is used in place from AFS by the jobs, so it must stay built and must not be modified while a campaign runs.
+All from a shell where `cmsenv` has NOT been sourced, with a valid kerberos ticket (production) or VOMS proxy (parquet to the T3). The CMSSW release area is `/afs/cern.ch/work/m/mmarcheg/private/ml4reco/phase2/CMSSW_20_1_0_pre4` (pepr overrides of `HLTrigger/NGTScouting`, `SimCalorimetry/HGCalAssociatorProducers`, `DPGAnalysis`, `IOMC`, `reco_prodtools` with the D128 skeletons); it is used in place from AFS by the jobs, so it must stay built and must not be modified while a campaign runs.
 
 ```shell
 cd production_tests/condor
@@ -188,7 +189,7 @@ cd production_tests/condor
 # the replicas only start when it succeeded. Submitted 2026-10-09, done in ~3h45.
 bash submit_dag.sh --particle 15 --partname taus --minE 20 --maxE 200 \
     --nreplicas 100 --nevents 500 --canary 5 --ncpus 2 --nthreads 1 --flavour workday \
-    --cmssw-base /afs/cern.ch/work/m/mmarcheg/private/ml4reco/phase2/CMSSW_20_0_0_pre1 \
+    --cmssw-base /afs/cern.ch/work/m/mmarcheg/private/ml4reco/phase2/CMSSW_20_1_0_pre4 \
     --outdir /eos/user/m/mmarcheg/ml4reco/data/taus_noFineCalo_with_tracksters_50k \
     --workdir /afs/cern.ch/user/m/mmarcheg/condor/taus_noFineCalo_with_tracksters_50k
 
@@ -198,7 +199,7 @@ bash submit_dag.sh --particle 15 --partname taus --minE 20 --maxE 200 \
 for E in 2 3 5 10 25 50 75 100 200 300; do
     bash submit_dag.sh --particle 22 --partname photons --energy $E \
         --nreplicas 4 --nevents 250 --ncpus 2 --nthreads 1 --flavour workday \
-        --cmssw-base /afs/cern.ch/work/m/mmarcheg/private/ml4reco/phase2/CMSSW_20_0_0_pre1 \
+        --cmssw-base /afs/cern.ch/work/m/mmarcheg/private/ml4reco/phase2/CMSSW_20_1_0_pre4 \
         --outdir /eos/user/m/mmarcheg/ml4reco/data/photons_noFineCalo_with_tracksters_${E}GeV_1k \
         --workdir /afs/cern.ch/user/m/mmarcheg/condor/photons_noFineCalo_with_tracksters_1k/E${E}GeV
 done

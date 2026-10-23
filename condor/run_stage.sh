@@ -1,5 +1,5 @@
 #!/bin/bash
-# run_stage.sh — one node of the pre1_D121 production DAG (see build_dag.sh).
+# run_stage.sh — one node of the pre4_D128 production DAG (see build_dag.sh).
 #
 # All arguments are key=value pairs, in any order:
 #

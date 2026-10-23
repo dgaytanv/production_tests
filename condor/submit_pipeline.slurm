@@ -7,7 +7,7 @@
 #SBATCH --output=logs/%x_%A_%a.out
 #SBATCH --error=logs/%x_%A_%a.err
 #
-# submit_pipeline.slurm — SLURM job-array launcher for the pre1_D121
+# submit_pipeline.slurm — SLURM job-array launcher for the pre4_D128
 # production_tests pipeline (falcon alternative to the LPC DAGMan setup).
 #
 # SLURM has no analog to DAGMan's per-node dependencies, so this instead
@@ -21,11 +21,11 @@
 #   sbatch --array=0-9 submit_pipeline.slurm \
 #          --energy 100 --nevents 200 \
 #          [--particle 22] [--partname photon] \
-#          [--cmssw-base /path/to/CMSSW_20_0_0_pre1] \
+#          [--cmssw-base /path/to/CMSSW_20_1_0_pre4] \
 #          [--outdir /path/to/output/dir]
 #
 # --outdir here is a shared filesystem path (falcon has no EOS). Defaults to
-#   /home/export/${USER}/production_tests/pre1_D121/{GSD,RECO,nanoML}/
+#   /home/export/${USER}/production_tests/pre4_D128/{GSD,RECO,nanoML}/
 #
 # Array indices ARE replica indices; run --array=0-9 for 10 replicas.
 
@@ -62,8 +62,8 @@ for var in ENERGY NEVENTS; do
 done
 
 # ---- Defaults ------------------------------------------------------------
-: "${CMSSW_BASE_ARG:=$HOME/CMSSW_20_0_0_pre1}"
-: "${OUTDIR:=/home/export/${USER}/production_tests/pre1_D121}"
+: "${CMSSW_BASE_ARG:=$HOME/CMSSW_20_1_0_pre4}"
+: "${OUTDIR:=/home/export/${USER}/production_tests/pre4_D128}"
 
 REPLICA="${SLURM_ARRAY_TASK_ID:-0}"
 JOBID="${SLURM_ARRAY_JOB_ID:-local}"

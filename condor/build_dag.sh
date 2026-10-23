@@ -1,6 +1,6 @@
 #!/bin/bash
 # build_dag.sh — generate a DAGMan .dag (plus its submit file) for the
-# pre1_D121 pipeline. Normally called by submit_dag.sh.
+# pre4_D128 pipeline. Normally called by submit_dag.sh.
 #
 # Two layouts (--mode):
 #   chain   one node per replica running [minbias ->] gsd -> reco -> nano in a
@@ -117,9 +117,9 @@ RUNSTAGE="$SCRIPT_DIR/run_stage.sh"
 
 if [ -z "$OUTDIR" ]; then
     if [ "$SITE" = lpc ]; then
-        OUTDIR="/store/user/${USER}/production_tests/pre1_D121"
+        OUTDIR="/store/user/${USER}/production_tests/pre4_D128"
     else
-        OUTDIR="/eos/user/${USER:0:1}/${USER}/production_tests/pre1_D121"
+        OUTDIR="/eos/user/${USER:0:1}/${USER}/production_tests/pre4_D128"
     fi
 fi
 
@@ -205,7 +205,7 @@ echo
 
 FIRST_NODES=()
 {
-    echo "# Auto-generated DAG for pre1_D121 production_tests"
+    echo "# Auto-generated DAG for pre4_D128 production_tests"
     echo "# sample=${SAMPLE}  particle=${PARTICLE}  minE=${MINE}  maxE=${MAXE}  fineCalo=${FINECALO}  gun=${GUN}"
     echo "# nreplicas=${NREPLICAS}  nevents=${NEVENTS}  pileup=${PILEUP}  nminbias=${NMINBIAS}"
     echo "# site=${SITE}  mode=${MODE}  keep=${KEEP}  seed_base=${SEED_BASE}  outdir=${OUTDIR}"

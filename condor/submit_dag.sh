@@ -1,5 +1,5 @@
 #!/bin/bash
-# submit_dag.sh — one-shot submission wrapper for the pre1_D121 pipeline.
+# submit_dag.sh — one-shot submission wrapper for the pre4_D128 pipeline.
 #
 # The site is detected from the hostname (override with --site cern|lpc):
 #   cern  lxplus/HTCondor. The CMSSW area is used in place from AFS (no
@@ -36,7 +36,7 @@
 #   # gated by a 5-event canary job
 #   bash submit_dag.sh --particle 15 --partname taus --minE 20 --maxE 200 \
 #        --nreplicas 100 --nevents 500 --canary 5 \
-#        --cmssw-base /afs/cern.ch/work/u/user/CMSSW_20_0_0_pre1 \
+#        --cmssw-base /afs/cern.ch/work/u/user/CMSSW_20_1_0_pre4 \
 #        --outdir /eos/user/u/user/taus_50k \
 #        --workdir /afs/cern.ch/user/u/user/condor/taus_50k
 
@@ -107,9 +107,9 @@ case "$WORKDIR" in /eos/*) die "--workdir must not be on EOS (HTCondor logs cann
 
 if [ -z "$OUTDIR" ]; then
     if [ "$SITE" = lpc ]; then
-        OUTDIR="/store/user/${USER}/production_tests/pre1_D121"
+        OUTDIR="/store/user/${USER}/production_tests/pre4_D128"
     else
-        OUTDIR="/eos/user/${USER:0:1}/${USER}/production_tests/pre1_D121"
+        OUTDIR="/eos/user/${USER:0:1}/${USER}/production_tests/pre4_D128"
     fi
 fi
 

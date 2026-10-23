@@ -22,16 +22,27 @@ process.load('SimGeneral.HepPDTESSource.pythiapdt_cfi')
 process.load('FWCore.MessageService.MessageLogger_cfi')
 process.load('Configuration.EventContent.EventContent_cff')
 process.load('SimGeneral.MixingModule.mixNoPU_cfi')
-process.load('Configuration.Geometry.GeometryExtendedRun4D121Reco_cff')
-process.load('Configuration.Geometry.GeometryExtendedRun4D121_cff')
+process.load('Configuration.Geometry.GeometryExtendedRun4D128Reco_cff')
+process.load('Configuration.Geometry.GeometryExtendedRun4D128_cff')
 process.load('Configuration.StandardSequences.MagneticField_cff')
-process.load('DPGAnalysis.HGCalNanoAOD.nanoHGCML_cff')
+process.load('DPGAnalysis.HGCalNanoAOD.HGCalNanoAOD_pepr_cff')
 
 # specify where to look for simSiPixelDigis objects
 process.tpClusterProducer.pixelSimLinkSrc = cms.InputTag("simSiPixelDigis", "Pixel", "HLT")
 process.tpClusterProducer.phase2OTSimLinkSrc = cms.InputTag("simSiPixelDigis", "Tracker", "HLT")
 
 process.load('Configuration.StandardSequences.Reconstruction_cff')
+# Since 20_1 the HGCAL associators re-run here (lcAssocByEnergyScoreProducer, ...)
+# need the TICL geometry EventSetup products. Reconstruction_cff puts their alpaka
+# ESProducers inside the HGCal local-reco Task, and ES modules that belong to a
+# Task which is never scheduled are dropped from the job even when the same
+# label is also loaded at top level, so clone them under labels of their own.
+# Accelerators_cff resolves their @alpaka suffix.
+process.load('Configuration.StandardSequences.Accelerators_cff')
+from RecoTICL.Geometry.TICLGeom_cff import ticlGeomESProducer, ticlGeomLookupESProducer, ticlGeomLayersESProducer
+process.nanoTiclGeomESProducer = ticlGeomESProducer.clone()
+process.nanoTiclGeomLookupESProducer = ticlGeomLookupESProducer.clone()
+process.nanoTiclGeomLayersESProducer = ticlGeomLayersESProducer.clone()
 process.load('Configuration.StandardSequences.EndOfProcess_cff')
 process.load('Configuration.StandardSequences.FrontierConditions_GlobalTag_cff')
 
@@ -109,7 +120,7 @@ process.NANOAODSIMoutput.outputCommands.append("keep nanoaodFlatTable_ticl*_*_*"
 from Configuration.AlCa.GlobalTag import GlobalTag
 process.GlobalTag = GlobalTag(process.GlobalTag, 'auto:mc', '')
 
-# TICL nano tables (added for CMSSW_20_0_0_pre1 / D121).
+# TICL nano tables (added for CMSSW_20_0_0_pre1 / D121, unchanged for 20_1_0_pre4 / D128).
 #
 # TICL is the default reco in pre1. Its products (ticlCandidate,
 # ticlTrackstersCLUE3DHigh, ticlTracksterLinks, ticlTrackstersRecovery,
@@ -147,7 +158,16 @@ process.ticlCandidateTable = cms.EDProducer("TICLCandidateTableProducer",
 # TICLCand -> linked Tracksters (Candidate2TrackstersIndices)
 process.ticlCandidateExtraTable = cms.EDProducer("TICLCandidateExtraTableProducer",
     src=cms.InputTag("ticlCandidate"),
-    name=cms.string("Candidate2Tracksters"),
+    # Since 20_1 the producer looks the linked tracksters up by key in this
+    # collection (default ticlTrackstersCLUE3DHigh); ticlCandidate references
+    # its own trackster collection.
+    tracksters=cms.InputTag("ticlCandidate"),
+    tracks=cms.InputTag("generalTracks"),
+    # Since 20_1 this producer writes an *extension* table, so it must carry the
+    # name of its main table (TICLCand): the per-candidate count/offset columns
+    # become TICLCand_nCandidate2TrackstersIndices etc., the linked-index table
+    # keeps its own name below.
+    name=cms.string("TICLCand"),
     skipNonExistingSrc=cms.bool(True),
     doc=cms.string("TICLCandidates extra table with linked Tracksters"),
     collectionVariables=cms.PSet(
@@ -305,7 +325,10 @@ process.ticlSimCandidateTable = process.ticlCandidateTable.clone(
 )
 process.ticlSimCandidateExtraTable = process.ticlCandidateExtraTable.clone(
     src=cms.InputTag("ticlSimTracksters"),
-    name=cms.string("SimCandidate2Tracksters"),
+    # sim TICLCandidates (rows parallel to ticlSimTracksters:fromCPs) link
+    # tracksters of the ticlSimTracksters "" collection
+    tracksters=cms.InputTag("ticlSimTracksters"),
+    name=cms.string("SimTICLCand"),  # extension of ticlSimCandidateTable, see above
     doc=cms.string("Sim TICLCandidates extra table with linked SimTracksters"),
     collectionVariables=cms.PSet(
         tracksters=cms.PSet(
@@ -440,7 +463,7 @@ from PhysicsTools.PatAlgos.tools.helpers import associatePatAlgosToolsTask
 associatePatAlgosToolsTask(process)
 
 # customisation of the process.
-from DPGAnalysis.HGCalNanoAOD.nanoHGCML_cff import customizeReco,customizeMergedSimClusters
+from DPGAnalysis.HGCalNanoAOD.HGCalNanoAOD_pepr_cff import customizeReco,customizeMergedSimClusters
 # Uncomment if you didn't schedule SimClusters/CaloParticles
 # process = customizeNoMergedCaloTruth(process)
 # merged simclusters (turn off if you aren't running through PEPR)

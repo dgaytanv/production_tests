@@ -1,32 +1,35 @@
-# production_tests — CMSSW_20_0_0_pre1 branch
+# production_tests — CMSSW_20_1_0_pre4 branch
 
 Simple production scripts for HGCAL Phase 2 studies on the pepr fork of
-CMSSW_20_0_0_pre1 with the `Run4D121` geometry. Fork of
+CMSSW_20_1_0_pre4 with the `Run4D128` geometry. Fork of
 [kdlong/production_tests](https://github.com/kdlong/production_tests),
-adapted for pre1 and the new default TICL reconstruction.
+adapted for CMSSW 20_1 and the default TICL reconstruction.
 
-For the `CMSSW_15_1_0` / `Run4D110` version, see the `master` branch.
+For the `CMSSW_20_0_0_pre1` / `Run4D121` version, see the `pre1_D121` branch;
+for `CMSSW_15_1_0` / `Run4D110`, see the `master` branch.
 
 ## Setup
 
 ```shell
-export SCRAM_ARCH=el9_amd64_gcc13
-version=CMSSW_20_0_0_pre1
+export SCRAM_ARCH=el9_amd64_gcc14
+version=CMSSW_20_1_0_pre4
 cmsrel $version
 cd $version/src
 cmsenv
 git cms-init -y
 git cms-merge-topic dgaytanv:pepr_${version}
+git cms-checkdeps -a   # pepr changes the SimCluster layout: rebuild every package that uses it
 scram b -j 4      # -j 12 can OOM on cmslpc
 
 # Reco fragments
 git clone git@github.com:dgaytanv/reco-prodtools.git reco_prodtools
 cd reco_prodtools/templates/python
-./produceSkeletons_D121.sh
+./produceSkeletons_D128.sh
 cd ../../..
+scram b           # registers reco_prodtools.templates.* as python modules
 
-# This repo (pre1_D121 branch)
-git clone -b pre1_D121 git@github.com:dgaytanv/production_tests.git
+# This repo (pre4_D128 branch)
+git clone -b pre4_D128 git@github.com:dgaytanv/production_tests.git
 cd production_tests
 ```
 
@@ -166,7 +169,7 @@ submits. Every DAG node runs `run_stage.sh` with `key=value` arguments.
 # PYTHONHOME/PYTHONPATH/LD_LIBRARY_PATH, which breaks condor_submit_dag).
 
 # LPC smoke test: 1 replica, 2 events at 10 GeV; defaults to
-# /store/user/$USER/production_tests/pre1_D121
+# /store/user/$USER/production_tests/pre4_D128
 cd $CMSSW_BASE/src/production_tests/condor
 voms-proxy-init -voms cms -valid 192:00
 bash submit_dag.sh --energy 10 --nreplicas 1 --nevents 2
@@ -178,7 +181,7 @@ bash submit_dag.sh --energy 100 --nreplicas 10 --nevents 200
 # gated by a 5-event canary job that must succeed before the replicas start
 bash submit_dag.sh --particle 15 --partname taus --minE 20 --maxE 200 \
     --nreplicas 100 --nevents 500 --canary 5 \
-    --cmssw-base /afs/cern.ch/work/u/user/CMSSW_20_0_0_pre1 \
+    --cmssw-base /afs/cern.ch/work/u/user/CMSSW_20_1_0_pre4 \
     --outdir /eos/user/u/user/taus_50k \
     --workdir /afs/cern.ch/user/u/user/condor/taus_50k
 
@@ -199,7 +202,7 @@ Options (`submit_dag.sh` accepts every `build_dag.sh` option):
 | `--gun`             | `flatEta`; `closeBy` starts the particle on the HGCAL front face (see GSD options) |
 | `--pileup`          | `0` (no PU). Set > 0 to enable minbias mixing.                          |
 | `--nminbias`        | equal to `--nevents`. Minbias events per replica.                       |
-| `--outdir`          | `/store/user/$USER/production_tests/pre1_D121` (LPC), `/eos/user/<u>/$USER/production_tests/pre1_D121` (CERN) |
+| `--outdir`          | `/store/user/$USER/production_tests/pre4_D128` (LPC), `/eos/user/<u>/$USER/production_tests/pre4_D128` (CERN) |
 | `--workdir`         | `condor/` — where the DAG, submit file and `logs/` are written; must not be on EOS |
 | `--cmssw-base`      | `../../..` relative to this repo (= `$CMSSW_BASE` when it sits in `src/`) |
 | `--mode`            | `chain` (CERN) / `stages` (LPC)                                         |
@@ -257,7 +260,7 @@ mkdir -p logs
 
 sbatch --array=0-9 submit_pipeline.slurm \
     --energy 100 --nevents 200 \
-    --outdir /home/export/$USER/production_tests/pre1_D121
+    --outdir /home/export/$USER/production_tests/pre4_D128
 ```
 
 Note: the SLURM version does not currently support `--pileup`. PU
@@ -266,8 +269,8 @@ as the condor version; not yet implemented. Run with `--pileup > 0`
 on LPC only for now.
 
 Same `--particle`/`--partname` flags as the LPC version. If your
-CMSSW is not at `$HOME/CMSSW_20_0_0_pre1`, pass
-`--cmssw-base /path/to/CMSSW_20_0_0_pre1`.
+CMSSW is not at `$HOME/CMSSW_20_1_0_pre4`, pass
+`--cmssw-base /path/to/CMSSW_20_1_0_pre4`.
 
 ### root → parquet conversion
 
@@ -420,7 +423,7 @@ jobs. Options after `--` go to every `generate.sh` call.
 # From a shell without cmsenv, with a VOMS proxy. Defaults: photons (22),
 # pions (211), K0L (130); 2-300 GeV; 4 batches x 250 events per energy.
 bash condor/submit_oneshot.sh \
-    --outdir /store/user/$USER/production_tests/pre1_D121/closeBy_Escan_oneshot \
+    --outdir /store/user/$USER/production_tests/pre4_D128/closeBy_Escan_oneshot \
     --workdir /uscms_data/d1/$USER/condor_work/closeBy_Escan_oneshot -- --gun closeBy
 
 # --dry-run writes the submit file and job list without submitting

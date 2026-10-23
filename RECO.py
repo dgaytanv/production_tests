@@ -48,7 +48,12 @@ process.hgcalAssociators = cms.Task(
     process.scAssocByEnergyScoreProducer,
     process.layerClusterSimClusterAssociationProducer,
     process.trackingParticleRecoTrackAsssociation,
-    process.simHitTPAssocProducer
+    process.simHitTPAssocProducer,
+    # Inputs of trackingParticleRecoTrackAsssociation. They are defined by the
+    # RECO fragment but, since CMSSW_20_1, no longer run by the RECOSIM step, so
+    # they have to be scheduled here.
+    process.tpClusterProducer,
+    process.quickTrackAssociatorByHits,
 )
 
 process.assoc = cms.Sequence(process.hgcalAssociators)
@@ -71,7 +76,7 @@ process.recosim_step *= process.assoc
 #   - std::map<uint,vector<uint>>   : CaloParticle index -> SimTrackster indices
 #   - std::vector<float> "" / "fromCPs": layer-cluster masks
 # ---------------------------------------------------------------------------
-from RecoHGCal.TICL.SimTracksters_cff import filteredLayerClustersSimTracksters, ticlSimTracksters
+from SimCalorimetry.TICLSimProducers.SimTracksters_cff import filteredLayerClustersSimTracksters, ticlSimTracksters
 from SimCalorimetry.HGCalAssociatorProducers.LCToTSAssociator_cfi import allLayerClusterToTracksterAssociations
 from SimCalorimetry.HGCalAssociatorProducers.HitToTracksterAssociation_cfi import allHitToTracksterAssociations
 from SimCalorimetry.HGCalAssociatorProducers.hitToSimClusterCaloParticleAssociator_cfi import hitToSimClusterCaloParticleAssociator
@@ -139,10 +144,10 @@ process.FEVTDEBUGoutput.outputCommands.extend(["keep *_MergedTrackTruth_*_*",
     "keep *_simTrack*_*_*",
     "keep *_simHit*_*_*",
     "keep *_mix_MergedCaloTruth*_*",
-    # MC-truth tracksters and their associations (see block above). The pre1
-    # FEVTDEBUG content (RecoHGCal_EventContent_cff) already lists most of these;
+    # MC-truth tracksters and their associations (see block above). The
+    # FEVTDEBUG content already lists most of these;
     # they are repeated here so the file documents what nanoML relies on.
-    # In CMSSW_20_0_0_pre1 the sim TICLCandidates and the fromCPs tracksters are
+    # Since CMSSW_20_0_0_pre1 the sim TICLCandidates and the fromCPs tracksters are
     # instances of the ticlSimTracksters module, so the first line already covers
     # them; the next two only matter if they become separate modules upstream.
     "keep *_ticlSimTracksters_*_*",
